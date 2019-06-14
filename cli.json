@@ -1,0 +1,14 @@
+{
+  "requirements": {
+    "go": "1.8.0"
+  },
+  "commands": [
+    {
+      "name": "gtm",
+      "version": "0.1.0-Dev",
+      "description": "Manage GTM Domains",
+      "bin": "https://github.com/akamai/cli-gtm/releases/download/{{.Version}}/akamai-{{.Name}}-{{.Version}}-{{.OS}}{{.Arch}}{{.BinSuffix}}",
+      "auto-complete": true
+    }
+  ]
+}
