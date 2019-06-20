@@ -17,10 +17,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
-        "os"
         "time"
-        "strconv"
 
         "github.com/akamai/AkamaiOPEN-edgegrid-golang/reportsgtm-v1"
 	akamai "github.com/akamai/cli-common-golang"
@@ -71,7 +68,8 @@ type PropertyStatusSummary struct {
 // Property DC Status Summary struct
 type PropertyDCStatus struct {
         reportsgtm.IpStatPerPropDRow
-        PropertyDCUsage           float64
+        DCTotalPeriodRequests     int64
+        DCPropertyUsage           string
 }
 
 var defaultPeriod time.Duration = 15*60*1000*1000
@@ -121,12 +119,10 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 
         // Looping on DCs
         for _, dcid := range qsDatacenters.flagList {
-                fmt.Println("Processing dc: ", strconv.Itoa(dcid))
                 dcTStatus, err := reportsgtm.GetTrafficPerDatacenter(domainname, dcid, optArgs)
                 if err != nil {
                         return nil, err 
                 }
-                fmt.Println("Creating DCDetail")
                 dcEntry := &DCStatusDetail{DatacenterId: dcid, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval, DCStatusByProperty: dcTStatus.DataRows}
                 dcTrafficStati.StatusByDatacenter = append(dcTrafficStati.StatusByDatacenter, dcEntry) 
         }
@@ -166,24 +162,27 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	// Calc requests % per datacenter
         type dcReqs struct {
                 reqs       int64
+                totalreqs  int64
                 perc       float64
         }
-        var propReqsSum int64        
-        dcReqMap := make(map[int]*dcReqs)
-
+        var dcReqMap map[int]dcReqs
+        var propertyTotalReqs int64
+        dcReqMap = make(map[int]dcReqs)
         for _, tData := range propertyTraffic.DataRows {
                 for _, dcData := range tData.Datacenters {
                         dcRow, ok := dcReqMap[dcData.DatacenterId]   // try to get entry
                         if !ok {
-                                dcRow = &dcReqs{}
+                                dcRow = dcReqs{}
                         }      
                         dcRow.reqs += dcData.Requests
-                        propReqsSum += dcData.Requests 
+                        dcReqMap[dcData.DatacenterId] = dcRow
+                        propertyTotalReqs += dcData.Requests
                 }
         }
         // Calculate percentage for WHOLE period
-        for _, dcRow := range dcReqMap {
-                dcRow.perc = (float64(dcRow.reqs)/float64(propReqsSum))*100
+        for k, dcRow := range dcReqMap {
+                dcRow.perc = (float64(dcRow.reqs)/float64(propertyTotalReqs))*100
+                dcReqMap[k] = dcRow
         }
 
        // Build PropertyResponse struct
@@ -196,13 +195,14 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
        statusSummary := &PropertyStatusSummary{LastUpdate: propertyIpAvail.DataRows[0].Timestamp, CutOff: propertyIpAvail.DataRows[0].CutOff} 
 
        var propertyDCStatusArray []*PropertyDCStatus
-       for _, dc := range propertyIpAvail.DataRows[0].Datacenters {               
+       for _, dc := range propertyIpAvail.DataRows[0].Datacenters {
                propertyDCStatus := &PropertyDCStatus{}
                propertyDCStatus.Nickname = dc.Nickname  
                propertyDCStatus.DatacenterId = dc.DatacenterId
                propertyDCStatus.TrafficTargetName = dc.TrafficTargetName  
                propertyDCStatus.IPs = dc.IPs
-               propertyDCStatus.PropertyDCUsage = dcReqMap[dc.DatacenterId].perc
+               propertyDCStatus.DCPropertyUsage = fmt.Sprintf("%.2f", dcReqMap[dc.DatacenterId].perc) + "%"
+               propertyDCStatus.DCTotalPeriodRequests = dcReqMap[dc.DatacenterId].reqs
                propertyDCStatusArray = append(propertyDCStatusArray, propertyDCStatus)
         }
         statusSummary.PropertyDCStatus = propertyDCStatusArray
@@ -214,16 +214,12 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 
 func cmdQueryStatus(c *cli.Context) error {
 
-        fmt.Println("Entering cmdQueryStatus")
-
 	config, err := akamai.GetEdgegridConfig(c)
 	if err != nil {
 		return err
 	}
 
-        reportsgtm.Config = config
-
-        fmt.Println("OS Args: %#v", os.Args) 
+        reportsgtm.Init(config)
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
@@ -240,12 +236,6 @@ func cmdQueryStatus(c *cli.Context) error {
                 return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
         }
 
-        // Debug
-        fmt.Println("Args: ", strings.Join(c.Args(), ", "))
-        fmt.Println("domainname: ", domainname)
-        fmt.Println("propertyname: ", qsProperty)
-        fmt.Println("datacenters: ", qsDatacenters.String())
-
         akamai.StartSpinner(
                 "Querying status ...",
                 fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),
@@ -257,15 +247,11 @@ func cmdQueryStatus(c *cli.Context) error {
                 fmt.Println("... Collecting DC status")
                 objStatus, err = gatherDatacenterStatus()
                 if err != nil {
-                        //debug
-                        fmt.Println("gather DC failed")
-                        json, _ := json.MarshalIndent(err, "", "  ")
-                        fmt.Fprintln(c.App.Writer, string(json))
-                        // end debug
                         akamai.StopSpinnerFail()
                         return cli.NewExitError(color.RedString("Unable to retrieve datacenter status. "+err.Error()), 1)
                 }
         } else if c.IsSet("property") { 
+                fmt.Println("... Collecting Property status")
                 objStatus, err = gatherPropertyStatus()
                 if err != nil {
                         akamai.StopSpinnerFail()

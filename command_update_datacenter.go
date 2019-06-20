@@ -41,7 +41,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
                 return err
         }
 
-        configgtm.Config = config
+        configgtm.Init(config)
 
         if c.NArg() == 0 {
                 cli.ShowCommandHelp(c, c.Command.Name)
@@ -67,11 +67,12 @@ func cmdUpdateDatacenter(c *cli.Context) error {
         )
 
         // get domain. Serves two purposes. Validates domain exists and retrieves all the properties
+        fmt.Println("Domain: ", domainname)
         dom, err := configgtm.GetDomain(domainname)
 
         if err != nil {
                 akamai.StopSpinnerFail()
-                return cli.NewExitError(color.RedString("Domain  not found "), 1)
+                return cli.NewExitError(color.RedString("Domain " + domainname + " not found "), 1)
         }
 
         properties := dom.Properties
@@ -114,18 +115,18 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 
         if len(properties) == 1 && len(failedArray) > 0 {
                 akamai.StopSpinnerFail()
-                return cli.NewExitError(color.RedString("Error updating property. "+err.Error()), 1)
+                return cli.NewExitError(color.RedString("Error updating property "+failedArray[0].PropName+": "+failedArray[0].FailMsg), 1)
         }
 
         akamai.StopSpinnerOk()
 
         updateSum := UpdateSummary{}
         if c.IsSet("verbose") && verboseStatus {
-                updateSum.Completed = succVerboseArray
+                updateSum.Updated_Properties = succVerboseArray
         } else {
-                updateSum.Completed = succShortArray
+                updateSum.Updated_Properties = succShortArray
         }
-        updateSum.Failed = failedArray
+        updateSum.Failed_Updates = failedArray
 
         json, err := json.MarshalIndent(updateSum, "", "  ")
         if err != nil {

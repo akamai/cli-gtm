@@ -34,8 +34,8 @@ type FailUpdate struct {
 }
 
 type UpdateSummary struct {
-        Completed    interface{}
-        Failed       []*FailUpdate
+        Updated_Properties    interface{}
+        Failed_Updates        []*FailUpdate
 }
 
 var verboseStatus bool

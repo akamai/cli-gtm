@@ -18,8 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
-        "os"
 
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
 	akamai "github.com/akamai/cli-common-golang"
@@ -41,9 +39,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		return err
 	}
 
-       configgtm.Config = config
-
-        fmt.Println("OS Args: %#v", os.Args) 
+        configgtm.Init(config)
 
 	if c.NArg() < 2 {
 		cli.ShowCommandHelp(c, c.Command.Name)
@@ -55,7 +51,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
         // Changes may be to enabled, weight or servers
         dcWeight = c.Float64("weight")
-        dcServers = c.StringSlice("servers")
+        dcServers = c.StringSlice("server")
         dcEnabled = c.BoolT("enabled")
         dcDatacenters = (c.Generic("datacenter")).(*arrayFlags)
         verboseStatus = c.Bool("verbose")
@@ -70,21 +66,12 @@ func cmdUpdateProperty(c *cli.Context) error {
                 return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
         }
 
-        // Debug
-        fmt.Println("Args: ", strings.Join(c.Args(), ", "))
-        fmt.Println("domainname: ", domainname)
-        fmt.Println("propertyname: ", propertyname)
-        fmt.Println("datacenters: ", dcDatacenters.String())
-        fmt.Println("enabled: ", strconv.FormatBool(dcEnabled))
-        fmt.Println("weight: ", dcWeight)
-        fmt.Println("servers: ", dcServers)
-
         akamai.StartSpinner(
                 "Updating property ...",
                 fmt.Sprintf("Fetching " + propertyname + " ...... [%s]", color.GreenString("OK")),
         )
 
-        property, err := configgtm.GetProperty(domainname, propertyname)
+        property, err := configgtm.GetProperty(propertyname, domainname)
         if err != nil {
                 akamai.StopSpinnerFail()
                 return cli.NewExitError(color.RedString("Property not found"), 1)
@@ -111,17 +98,28 @@ func cmdUpdateProperty(c *cli.Context) error {
                                         changes_made = true 
                                 }       
                                 if c.IsSet("servers") {
-                                        for i, v := range traffTarg.Servers {
-                                                if v != dcServers[i] {
-                                                        traffTarg.Servers = dcServers
-                                                        changes_made = true
+                                        traffTarg.Servers = dcServers
+                                        changes_made = true
+ 
+                                        /*
+                                        if len(dcServers) != len(traffTarg.Servers) {
+                                                traffTarg.Servers = dcServers
+                                                changes_made = true
+                                        } else {
+                                                sort.Sort(dcServers)
+                                                sort.Sort(traffTarg.Servers)
+                                                for i, v := range traffTarg.Servers {
+                                                        if v != dcServers[i] {
+                                                                traffTarg.Servers = dcServers
+                                                                changes_made = true
+                                                        }
                                                 }
                                         }
-                                }
-                        }       
+                                        */
+                                }       
+                        }
                }
         }
-
         if changes_made {
                 propstat, err := property.Update(domainname)
                 if err != nil {
@@ -135,7 +133,7 @@ func cmdUpdateProperty(c *cli.Context) error {
                 if c.IsSet("verbose") && verboseStatus {
                         status = propstat
                 } else {
-                        status = &propstat.ChangeId
+                        status = "ChangeId: " + propstat.ChangeId
                 }
 
                 json, err := json.MarshalIndent(status, "", "  ")
