@@ -55,18 +55,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
         verboseStatus = c.Bool("verbose")
         dcNicknames = c.StringSlice("dcnickname")
 
-        if !c.IsSet("datacenterid") || len(dcDatacenters.flagList) == 0 {
+        // if nicknames specified, add to dcFlags
+        if c.IsSet("dcnickname") {
+                ParseNicknames(dcNicknames, domainname)
+        }
+        if (!c.IsSet("datacenterid") && !c.IsSet("dcnickname")) || len(dcDatacenters.flagList) == 0 {
                 cli.ShowCommandHelp(c, c.Command.Name)
                 return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
         }
+
         if !c.IsSet("enabled") {
                 cli.ShowCommandHelp(c, c.Command.Name)
                 return cli.NewExitError(color.RedString("new enabled state is required"), 1)
         }
-        // if nicknames specified, add to dcFlags 
-        if c.IsSet("dcnickname") {
-                ParseNicknames(dcNicknames, domainname)
-        } 
         akamai.StartSpinner(
                 "Fetching data...",
                 fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")),
