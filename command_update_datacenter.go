@@ -29,6 +29,7 @@ import (
 
 var dcEnabled bool
 var dcDatacenters *arrayFlags
+var dcNicknames []string
 
 var succShortArray []*SuccUpdateShort
 var succVerboseArray []*SuccUpdateVerbose
@@ -49,17 +50,22 @@ func cmdUpdateDatacenter(c *cli.Context) error {
         }
 
         domainname := c.Args().First()
-        dcDatacenters = c.Generic("datacenter").(*arrayFlags)
+        dcDatacenters = c.Generic("datacenterid").(*arrayFlags)
         dcEnabled = c.BoolT("enabled")
         verboseStatus = c.Bool("verbose")
+        dcNicknames = c.StringSlice("dcnickname")
 
-        if !c.IsSet("datacenter") || len(dcDatacenters.flagList) == 0 {
+        if !c.IsSet("datacenterid") || len(dcDatacenters.flagList) == 0 {
                 cli.ShowCommandHelp(c, c.Command.Name)
                 return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
         }
         if !c.IsSet("enabled") {
                 cli.ShowCommandHelp(c, c.Command.Name)
                 return cli.NewExitError(color.RedString("new enabled state is required"), 1)
+        }
+        // if nicknames specified, add to dcFlags 
+        if c.IsSet("dcnickname") {
+                ParseNicknames(dcNicknames, domainname)
         } 
         akamai.StartSpinner(
                 "Fetching data...",
@@ -121,18 +127,24 @@ func cmdUpdateDatacenter(c *cli.Context) error {
         akamai.StopSpinnerOk()
 
         updateSum := UpdateSummary{}
-        if c.IsSet("verbose") && verboseStatus {
+        if c.IsSet("verbose") && verboseStatus && len(succVerboseArray) > 0 {
                 updateSum.Updated_Properties = succVerboseArray
-        } else {
+        } else if len(succShortArray) > 0 {
                 updateSum.Updated_Properties = succShortArray
         }
-        updateSum.Failed_Updates = failedArray
-
+        if len(failedArray) > 0 {        
+                updateSum.Failed_Updates = failedArray
+        }
+       
         json, err := json.MarshalIndent(updateSum, "", "  ")
         if err != nil {
                 return cli.NewExitError(color.RedString("Unable to display property update status"), 1)
-        }  
-        fmt.Fprintln(c.App.Writer, string(json))
+        }
+        if updateSum.Failed_Updates == nil && updateSum.Updated_Properties == nil {
+                fmt.Fprintln(c.App.Writer, "No property updates were needed.")
+        } else {  
+                fmt.Fprintln(c.App.Writer, string(json))
+        }
 
         return nil 
 

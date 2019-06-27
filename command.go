@@ -52,6 +52,12 @@ func (i *arrayFlags) Get(indx int) int {
 }
  
 func (i *arrayFlags) Set(value string) error {
+
+         for _, v := range i.flagStringList {
+                 if v == value {
+                         return nil
+                 }
+         }
          intVal, err := strconv.Atoi(value)
          if err != nil {
                  return err
@@ -71,9 +77,13 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		Action:      cmdUpdateDatacenter,
 		Flags: []cli.Flag{
                        cli.GenericFlag{
-                                Name:  "datacenter",
-                                Usage: "Apply change to specified datacenter",
+                                Name:  "datacenterid",
+                                Usage: "Apply change to specified datacenter by id.",
                                 Value: &dcFlags,
+                        },
+                        cli.StringSliceFlag{
+                                Name:  "dcnickname",
+                                Usage: "Apply change to specified datacenter by nickname.",
                         },
  			cli.BoolTFlag{
 				Name:  "enabled",
@@ -94,9 +104,13 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		Action:      cmdUpdateProperty,
 		Flags: []cli.Flag{
                         cli.GenericFlag{
-                                Name:  "datacenter",
-                                Usage: "Apply change to specified datacenter",
+                                Name:  "datacenterid",
+                                Usage: "Apply change to specified datacenter by id.",
                                 Value: &dcFlags,
+                        },      
+                        cli.StringSliceFlag{
+                                Name:  "dcnickname",
+                                Usage: "Apply change to specified datacenter by nickname.",
                         },      
                         cli.BoolTFlag{
                                 Name:  "enabled",
@@ -104,7 +118,7 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
                         },      
                         cli.Float64Flag{
                                 Name:  "weight",
-                                Usage: "Apply 'weight' to specified datacenter",
+                                Usage: "Apply 'weight' to specified datacenter.",
                         },
                         cli.StringSliceFlag{
                                 Name:  "server",
@@ -125,13 +139,17 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
                 Action:      cmdQueryStatus,
                 Flags: []cli.Flag{
                        cli.GenericFlag{
-                                Name:  "datacenter",
-                                Usage: "Report status of specified datacenter",
+                                Name:  "datacenterid",
+                                Usage: "Report status of specified datacenter by id.",
                                 Value: &dcFlags,
                         },
+                        cli.StringSliceFlag{
+                                Name:  "dcnickname",
+                                Usage: "Apply change to specified datacenter by nickname.",
+                        },      
                         cli.StringFlag{
                                 Name:  "property",
-                                Usage: "Report status of specified property",
+                                Usage: "Report status of specified property.",
                         },
                         cli.BoolFlag{
                                 Name:  "verbose",

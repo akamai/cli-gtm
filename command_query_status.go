@@ -30,6 +30,7 @@ var domainname       string
 var qsProperty       string
 var qsDatacenters    *arrayFlags
 var statusPeriodLen = "15m"
+var qsNicknames      []string
 
 // Data Center Traffic Status returned structure. Contains a list of individual DC stati.
 type DCTrafficStati struct {
@@ -229,13 +230,17 @@ func cmdQueryStatus(c *cli.Context) error {
 	domainname = c.Args().Get(0) 
 
         qsProperty = c.String("property")
-        qsDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+        qsDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
+        qsNicknames = c.StringSlice("dcnickname")
         verboseStatus = c.Bool("verbose")
 
-        if (!c.IsSet("datacenter") && !c.IsSet("property")) || (c.IsSet("datacenter") && c.IsSet("property")) {
+        if (!c.IsSet("datacenterid") && !c.IsSet("dcnickname") && !c.IsSet("property")) || (c.IsSet("property") && (c.IsSet("datacenterid") || c.IsSet("dcnickname"))) {
                 return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
         }
-
+        // if nicknames specified, add to dcFlags
+        if c.IsSet("dcnickname") {
+                ParseNicknames(qsNicknames, domainname)
+        } 
         akamai.StartSpinner(
                 "Querying status ...",
                 fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),

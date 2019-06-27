@@ -33,6 +33,8 @@ func cmdUpdateProperty(c *cli.Context) error {
         var dcEnabled bool
         var dcDatacenters *arrayFlags
         var verboseStatus bool
+        var dcNicknames []string
+
 
 	config, err := akamai.GetEdgegridConfig(c)
 	if err != nil {
@@ -53,12 +55,17 @@ func cmdUpdateProperty(c *cli.Context) error {
         dcWeight = c.Float64("weight")
         dcServers = c.StringSlice("server")
         dcEnabled = c.BoolT("enabled")
-        dcDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+        dcDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
+        dcNicknames = c.StringSlice("dcnickname")
         verboseStatus = c.Bool("verbose")
 
-        if !c.IsSet("datacenter") {
+        if !c.IsSet("datacenterid") && !c.IsSet("dcnickname") {
                 return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
         }
+        // if nicknames specified, add to dcFlags
+        if c.IsSet("dcnickname") {
+                ParseNicknames(dcNicknames, domainname)
+        } 
         if c.IsSet("servers") && len(dcDatacenters.flagList) > 1 {
                 return cli.NewExitError(color.RedString("servers update may only apply to one datacenter"), 1)
         }
@@ -102,6 +109,7 @@ func cmdUpdateProperty(c *cli.Context) error {
                                         changes_made = true
  
                                         /*
+                                        // See if we really are updating ... 
                                         if len(dcServers) != len(traffTarg.Servers) {
                                                 traffTarg.Servers = dcServers
                                                 changes_made = true
@@ -126,7 +134,7 @@ func cmdUpdateProperty(c *cli.Context) error {
                         akamai.StopSpinnerFail()
                         return cli.NewExitError(color.RedString("Error updating property "+propertyname+". "+err.Error()), 1)
                 }
-                fmt.Fprintln(c.App.Writer,  "Property " + propertyname + " updated")
+                fmt.Fprintln(c.App.Writer, "Property " + propertyname + " updated")
 
                 var status interface{}
 
@@ -142,6 +150,8 @@ func cmdUpdateProperty(c *cli.Context) error {
                         return cli.NewExitError(color.RedString("Unable to display property update status"), 1)
                 }
                 fmt.Fprintln(c.App.Writer, string(json))
+        } else {
+                fmt.Fprintln(c.App.Writer, "No update required for Property " + propertyname)
         }
 
         akamai.StopSpinnerOk()
