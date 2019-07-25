@@ -15,56 +15,53 @@
 package main
 
 import (
-	//"fmt"
-	//"os"
+	"strconv"
 	"strings"
-        "strconv"
 
 	akamai "github.com/akamai/cli-common-golang"
-	//"github.com/fatih/color"
 	"github.com/urfave/cli"
 )
 
 type arrayFlags struct {
-        flagList       []int
-        flagStringList []string
+	flagList       []int
+	flagStringList []string
 }
 
 var dcFlags arrayFlags
 
 func (i *arrayFlags) String() string {
 
-        if len(i.flagStringList) == 0 {
-                return ""
-        }
-        fString := strings.Join(i.flagStringList, ", ")
-        return fString
+	if len(i.flagStringList) == 0 {
+		return ""
+	}
+	fString := strings.Join(i.flagStringList, ", ")
+	return fString
 }
 
 func (i *arrayFlags) Get(indx int) int {
 
-         var val int 
-         if indx < len(i.flagList) {
-                 val =  i.flagList[indx]                
-         }
-         // TODO: Add some definition to error ...
-         return val
+	var val int
+	if indx < len(i.flagList) {
+		val = i.flagList[indx]
+	}
+	// TODO: Add some definition to error ...
+	return val
 }
- 
+
 func (i *arrayFlags) Set(value string) error {
 
-         for _, v := range i.flagStringList {
-                 if v == value {
-                         return nil
-                 }
-         }
-         intVal, err := strconv.Atoi(value)
-         if err != nil {
-                 return err
-         }
-         i.flagList = append(i.flagList,intVal)
-         i.flagStringList = append(i.flagStringList,value)
-         return nil
+	for _, v := range i.flagStringList {
+		if v == value {
+			return nil
+		}
+	}
+	intVal, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	i.flagList = append(i.flagList, intVal)
+	i.flagStringList = append(i.flagStringList, value)
+	return nil
 }
 
 var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
@@ -76,23 +73,27 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		ArgsUsage:   "<domain>",
 		Action:      cmdUpdateDatacenter,
 		Flags: []cli.Flag{
-                       cli.GenericFlag{
-                                Name:  "datacenterid",
-                                Usage: "Apply change to specified datacenter by id.",
-                                Value: &dcFlags,
-                        },
-                        cli.StringSliceFlag{
-                                Name:  "dcnickname",
-                                Usage: "Apply change to specified datacenter by nickname.",
-                        },
- 			cli.BoolTFlag{
+			cli.GenericFlag{
+				Name:  "datacenterid",
+				Usage: "Apply change to specified datacenter by id.",
+				Value: &dcFlags,
+			},
+			cli.StringSliceFlag{
+				Name:  "dcnickname",
+				Usage: "Apply change to specified datacenter by nickname.",
+			},
+			cli.BoolTFlag{
 				Name:  "enabled",
 				Usage: "Apply 'enabled' state specified. Default is true.",
 			},
-                        cli.BoolFlag{
-                                Name:  "verbose",
-                                Usage: "Display verbose result status. Default is false.",
-                        },
+			cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Display verbose result status. Default is false.",
+			},
+			cli.BoolFlag{
+				Name:  "json",
+				Usage: "Return status in JSON format. Default is false.",
+			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})
@@ -103,61 +104,69 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		ArgsUsage:   "[domain, property]",
 		Action:      cmdUpdateProperty,
 		Flags: []cli.Flag{
-                        cli.GenericFlag{
-                                Name:  "datacenterid",
-                                Usage: "Apply change to specified datacenter by id.",
-                                Value: &dcFlags,
-                        },      
-                        cli.StringSliceFlag{
-                                Name:  "dcnickname",
-                                Usage: "Apply change to specified datacenter by nickname.",
-                        },      
-                        cli.BoolTFlag{
-                                Name:  "enabled",
-                                Usage: "Apply 'enabled' state specified. Default is true.",
-                        },      
-                        cli.Float64Flag{
-                                Name:  "weight",
-                                Usage: "Apply 'weight' to specified datacenter.",
-                        },
-                        cli.StringSliceFlag{
-                                Name:  "server",
-                                Usage: "Update target server for specified datacenter. Multiple flags may be specified.",
-                        },
-                        cli.BoolFlag{
-                                Name:  "verbose",
-                                Usage: "Display verbose result status. Default is false.",
-                        },
-                },  
+			cli.GenericFlag{
+				Name:  "datacenterid",
+				Usage: "Apply change to specified datacenter by id.",
+				Value: &dcFlags,
+			},
+			cli.StringSliceFlag{
+				Name:  "dcnickname",
+				Usage: "Apply change to specified datacenter by nickname.",
+			},
+			cli.BoolTFlag{
+				Name:  "enabled",
+				Usage: "Apply 'enabled' state specified. Default is true.",
+			},
+			cli.Float64Flag{
+				Name:  "weight",
+				Usage: "Apply 'weight' to specified datacenter.",
+			},
+			cli.StringSliceFlag{
+				Name:  "server",
+				Usage: "Update target server for specified datacenter. Multiple flags may be specified.",
+			},
+			cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Display verbose result status. Default is false.",
+			},
+			cli.BoolFlag{
+				Name:  "json",
+				Usage: "Return status in JSON format. Default is false.",
+			},
+		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})
 
-        commands = append(commands, cli.Command{
-                Name:        "query-status",
-                Description: "Query current status of property or datacenter",
-                ArgsUsage:   "<domain>",
-                Action:      cmdQueryStatus,
-                Flags: []cli.Flag{
-                       cli.GenericFlag{
-                                Name:  "datacenterid",
-                                Usage: "Report status of specified datacenter by id.",
-                                Value: &dcFlags,
-                        },
-                        cli.StringSliceFlag{
-                                Name:  "dcnickname",
-                                Usage: "Apply change to specified datacenter by nickname.",
-                        },      
-                        cli.StringFlag{
-                                Name:  "property",
-                                Usage: "Report status of specified property.",
-                        },
-                        cli.BoolFlag{
-                                Name:  "verbose",
-                                Usage: "Display verbose status. Default is false.",
-                        },
-                },
-          BashComplete: akamai.DefaultAutoComplete,
-        })
+	commands = append(commands, cli.Command{
+		Name:        "query-status",
+		Description: "Query current status of property or datacenter",
+		ArgsUsage:   "<domain>",
+		Action:      cmdQueryStatus,
+		Flags: []cli.Flag{
+			cli.GenericFlag{
+				Name:  "datacenterid",
+				Usage: "Report status of specified datacenter by id.",
+				Value: &dcFlags,
+			},
+			cli.StringSliceFlag{
+				Name:  "dcnickname",
+				Usage: "Apply change to specified datacenter by nickname.",
+			},
+			cli.StringFlag{
+				Name:  "property",
+				Usage: "Report status of specified property.",
+			},
+			cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Display verbose status. Default is false.",
+			},
+			cli.BoolFlag{
+				Name:  "json",
+				Usage: "Return status in JSON format. Default is false.",
+			},
+		},
+		BashComplete: akamai.DefaultAutoComplete,
+	})
 
 	commands = append(commands,
 		cli.Command{

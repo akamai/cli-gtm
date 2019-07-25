@@ -14,8 +14,8 @@
 package main
 
 import (
-	"os"
 	akamai "github.com/akamai/cli-common-golang"
+	"os"
 )
 
 var (
@@ -31,7 +31,6 @@ func main() {
 		"gtm",
 		commandLocator,
 	)
-     
 
 	setHelpTemplates()
 	akamai.App.Run(os.Args)

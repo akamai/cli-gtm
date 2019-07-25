@@ -15,29 +15,29 @@
 package main
 
 import (
-        "github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
-        "strconv"
-        "github.com/urfave/cli"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
+	"github.com/urfave/cli"
+	"strconv"
 )
 
 type SuccUpdateShort struct {
-        PropName string
-        ChangeId string
+	PropName string
+	ChangeId string
 }
 
 type SuccUpdateVerbose struct {
-        PropName string
-        RespStat *configgtm.ResponseStatus
+	PropName string
+	RespStat *configgtm.ResponseStatus
 }
 
 type FailUpdate struct {
-        PropName string
-        FailMsg  string
+	PropName string
+	FailMsg  string
 }
 
 type UpdateSummary struct {
-        Updated_Properties    interface{}
-        Failed_Updates        []*FailUpdate
+	Updated_Properties interface{}
+	Failed_Updates     []*FailUpdate
 }
 
 var verboseStatus bool
@@ -45,16 +45,15 @@ var verboseStatus bool
 // parse any nicknames provided and add to dcFlags
 func ParseNicknames(nicknames cli.StringSlice, domainname string) {
 
-        // get list of data centers
-        dcList, _ := configgtm.ListDatacenters(domainname)
-        // walk thru datacenters and nicknames
-        for _, dc := range dcList {
-                for _, nn := range nicknames {
-                        if dc.Nickname == nn {
-                                dcFlags.Set(strconv.Itoa(dc.DatacenterId))
-                        }
-                }     
-        }
+	// get list of data centers
+	dcList, _ := configgtm.ListDatacenters(domainname)
+	// walk thru datacenters and nicknames
+	for _, dc := range dcList {
+		for _, nn := range nicknames {
+			if dc.Nickname == nn {
+				dcFlags.Set(strconv.Itoa(dc.DatacenterId))
+			}
+		}
+	}
 
 }
-

@@ -18,145 +18,191 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-
+        "strings"
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
-	//"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 )
 
 func cmdUpdateProperty(c *cli.Context) error {
 
-        var dcWeight float64
-        var dcServers []string
-        var dcEnabled bool
-        var dcDatacenters *arrayFlags
-        var verboseStatus bool
-        var dcNicknames []string
-
+	var dcWeight float64
+	var dcServers []string
+	var dcEnabled bool
+	var dcDatacenters *arrayFlags
+	var verboseStatus bool
+	var dcNicknames []string
 
 	config, err := akamai.GetEdgegridConfig(c)
 	if err != nil {
 		return err
 	}
 
-        configgtm.Init(config)
+	configgtm.Init(config)
 
 	if c.NArg() < 2 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("domain and property are required"), 1)
 	}
 
-	domainname := c.Args().Get(0) 
-        propertyname := c.Args().Get(1)
+	domainname := c.Args().Get(0)
+	propertyname := c.Args().Get(1)
 
-        // Changes may be to enabled, weight or servers
-        dcWeight = c.Float64("weight")
-        dcServers = c.StringSlice("server")
-        dcEnabled = c.BoolT("enabled")
-        dcDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
-        dcNicknames = c.StringSlice("dcnickname")
-        verboseStatus = c.Bool("verbose")
+	// Changes may be to enabled, weight or servers
+	dcWeight = c.Float64("weight")
+	dcServers = c.StringSlice("server")
+	dcEnabled = c.BoolT("enabled")
+	dcDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
+	dcNicknames = c.StringSlice("dcnickname")
+	verboseStatus = c.Bool("verbose")
 
-        if !c.IsSet("datacenterid") && !c.IsSet("dcnickname") {
-                return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
-        }
-        // if nicknames specified, add to dcFlags
-        if c.IsSet("dcnickname") {
-                ParseNicknames(dcNicknames, domainname)
-        } 
-        if c.IsSet("servers") && len(dcDatacenters.flagList) > 1 {
-                return cli.NewExitError(color.RedString("servers update may only apply to one datacenter"), 1)
-        }
-        if c.IsSet("weight") && len(dcDatacenters.flagList) > 1 {
-                return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
-        }
+	if !c.IsSet("datacenterid") && !c.IsSet("dcnickname") {
+		return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
+	}
+	// if nicknames specified, add to dcFlags
+	if c.IsSet("dcnickname") {
+		ParseNicknames(dcNicknames, domainname)
+	}
+	if c.IsSet("servers") && len(dcDatacenters.flagList) > 1 {
+		return cli.NewExitError(color.RedString("servers update may only apply to one datacenter"), 1)
+	}
+	if c.IsSet("weight") && len(dcDatacenters.flagList) > 1 {
+		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
+	}
 
-        akamai.StartSpinner(
-                "Updating property ...",
-                fmt.Sprintf("Fetching " + propertyname + " ...... [%s]", color.GreenString("OK")),
-        )
+	akamai.StartSpinner(
+		"Updating property ...",
+		fmt.Sprintf("Fetching "+propertyname+" ...... [%s]", color.GreenString("OK")),
+	)
 
-        property, err := configgtm.GetProperty(propertyname, domainname)
-        if err != nil {
-                akamai.StopSpinnerFail()
-                return cli.NewExitError(color.RedString("Property not found"), 1)
-        }
+	property, err := configgtm.GetProperty(propertyname, domainname)
+	if err != nil {
+		akamai.StopSpinnerFail()
+		return cli.NewExitError(color.RedString("Property not found"), 1)
+	}
 
-        changes_made := false
+	changes_made := false
 
-        fmt.Println("Property: "+property.Name)
-        trafficTargets := property.TrafficTargets
-        targetsmsg := property.Name + " contains " + strconv.Itoa(len(trafficTargets)) + " targets"
-        fmt.Println(targetsmsg)
-        fmt.Sprintf(targetsmsg)
-        for _, traffTarg := range trafficTargets {
-               for _, dcid := range dcDatacenters.flagList {
-                        if traffTarg.DatacenterId == dcid {
-                                fmt.Sprintf(traffTarg.Name + " contains dc " + strconv.Itoa(dcid))
-                                if c.IsSet("enabled") && traffTarg.Enabled != dcEnabled {
-                                        traffTarg.Enabled = dcEnabled
-                                        changes_made = true
-                                }
-                                if c.IsSet("weight") && traffTarg.Weight != dcWeight {
-                                        // Note: weight will be ignored for a number of property types
-                                        traffTarg.Weight = dcWeight
-                                        changes_made = true 
-                                }       
-                                if c.IsSet("servers") {
-                                        traffTarg.Servers = dcServers
-                                        changes_made = true
- 
-                                        /*
-                                        // See if we really are updating ... 
-                                        if len(dcServers) != len(traffTarg.Servers) {
-                                                traffTarg.Servers = dcServers
-                                                changes_made = true
-                                        } else {
-                                                sort.Sort(dcServers)
-                                                sort.Sort(traffTarg.Servers)
-                                                for i, v := range traffTarg.Servers {
-                                                        if v != dcServers[i] {
-                                                                traffTarg.Servers = dcServers
-                                                                changes_made = true
-                                                        }
-                                                }
-                                        }
-                                        */
-                                }       
-                        }
-               }
-        }
-        if changes_made {
-                propstat, err := property.Update(domainname)
-                if err != nil {
-                        akamai.StopSpinnerFail()
-                        return cli.NewExitError(color.RedString("Error updating property "+propertyname+". "+err.Error()), 1)
+	fmt.Println("Property: " + property.Name)
+	trafficTargets := property.TrafficTargets
+	targetsmsg := property.Name + " contains " + strconv.Itoa(len(trafficTargets)) + " targets"
+	fmt.Println(targetsmsg)
+	fmt.Sprintf(targetsmsg)
+	for _, traffTarg := range trafficTargets {
+		for _, dcid := range dcDatacenters.flagList {
+			if traffTarg.DatacenterId == dcid {
+				fmt.Sprintf(traffTarg.Name + " contains dc " + strconv.Itoa(dcid))
+				if c.IsSet("enabled") && traffTarg.Enabled != dcEnabled {
+					traffTarg.Enabled = dcEnabled
+					changes_made = true
+				}
+				if c.IsSet("weight") && traffTarg.Weight != dcWeight {
+					// Note: weight will be ignored for a number of property types
+					traffTarg.Weight = dcWeight
+					changes_made = true
+				}
+				if c.IsSet("servers") {
+					traffTarg.Servers = dcServers
+					changes_made = true
+
+					/*
+					   // See if we really are updating ...
+					   if len(dcServers) != len(traffTarg.Servers) {
+					           traffTarg.Servers = dcServers
+					           changes_made = true
+					   } else {
+					           sort.Sort(dcServers)
+					           sort.Sort(traffTarg.Servers)
+					           for i, v := range traffTarg.Servers {
+					                   if v != dcServers[i] {
+					                           traffTarg.Servers = dcServers
+					                           changes_made = true
+					                   }
+					           }
+					   }
+					*/
+				}
+			}
+		}
+	}
+	if changes_made {
+		propstat, err := property.Update(domainname)
+		if err != nil {
+			akamai.StopSpinnerFail()
+			return cli.NewExitError(color.RedString("Error updating property "+propertyname+". "+err.Error()), 1)
+		}
+		fmt.Fprintln(c.App.Writer, "Property "+propertyname+" updated")
+
+		var status interface{}
+
+		if c.IsSet("verbose") && verboseStatus {
+			status = propstat
+		} else {
+			status = "ChangeId: " + propstat.ChangeId
+		}
+
+        	if c.IsSet("json") && c.Bool("json") {
+                	json, err := json.MarshalIndent(status, "", "  ")
+                	if err != nil {
+                        	akamai.StopSpinnerFail()
+                        	return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+                	}
+                	fmt.Fprintln(c.App.Writer, string(json))
+        	} else {
+                	fmt.Fprintln(c.App.Writer, "")
+                	if c.IsSet("verbose") && verboseStatus {
+ 				fmt.Fprintln(c.App.Writer, renderStatus(status.(*configgtm.ResponseStatus), c))
+                	} else {
+				fmt.Fprintln(c.App.Writer, "Response Status")
+                                fmt.Fprintln(c.App.Writer, " ")
+                        	fmt.Fprintln(c.App.Writer, status)
+                	}
                 }
-                fmt.Fprintln(c.App.Writer, "Property " + propertyname + " updated")
+	} else {
+		fmt.Fprintln(c.App.Writer, "No update required for Property "+propertyname)
+	}
 
-                var status interface{}
+	akamai.StopSpinnerOk()
 
-                if c.IsSet("verbose") && verboseStatus {
-                        status = propstat
-                } else {
-                        status = "ChangeId: " + propstat.ChangeId
-                }
-
-                json, err := json.MarshalIndent(status, "", "  ")
-                if err != nil {
-                        akamai.StopSpinnerFail()
-                        return cli.NewExitError(color.RedString("Unable to display property update status"), 1)
-                }
-                fmt.Fprintln(c.App.Writer, string(json))
-        } else {
-                fmt.Fprintln(c.App.Writer, "No update required for Property " + propertyname)
-        }
-
-        akamai.StopSpinnerOk()
-
-        return nil
+	return nil
 
 }
 
+func renderStatus(status *configgtm.ResponseStatus, c *cli.Context) string {
+
+        var outstring string
+        outstring += fmt.Sprintln(" ")
+        outstring += fmt.Sprintln("Response Status")
+        outstring += fmt.Sprintln(" ")
+        tableString := &strings.Builder{}
+        table := tablewriter.NewWriter(tableString)
+
+        table.SetReflowDuringAutoWrap(false)
+        table.SetCenterSeparator(" ")
+        table.SetColumnSeparator(" ")
+        table.SetRowSeparator(" ")
+        table.SetBorder(false)
+        table.SetAutoWrapText(false)
+        table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+        table.SetAlignment(tablewriter.ALIGN_CENTER)
+
+	// Build status table. Exclude Links.
+        rowdata := []string{"ChangeId", status.ChangeId}
+        table.Append(rowdata)
+        rowdata = []string{"Message", status.Message}
+        table.Append(rowdata)
+        rowdata = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
+        table.Append(rowdata)
+        rowdata = []string{"Propagation Status", status.PropagationStatus}
+        table.Append(rowdata)
+        rowdata = []string{"Propagation Status Date", status.PropagationStatusDate}
+        table.Append(rowdata)
+
+        table.Render()
+        outstring += fmt.Sprintln(tableString.String())
+
+        return outstring
+
+}
