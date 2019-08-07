@@ -26,10 +26,8 @@
 
 [[constraint]]
   name = "github.com/akamai/AkamaiOPEN-edgegrid-golang"
-  source = "github.com/edglynes/AkamaiOPEN-edgegrid-golang"
-  branch = "add-gtm"
-#  branch = "master"
-#  version = "0.7.x"
+  branch = "master"
+#  version = "0.8.0"
 
 [[constraint]]
   branch = "master"
@@ -39,21 +37,14 @@
   name = "github.com/fatih/color"
   version = "1.6.0"
 
-#[[constraint]]
-#  name = "github.com/olekukonko/tablewriter"
+[[constraint]]
+  name = "github.com/olekukonko/tablewriter"
 #  branch = "master"
+  version = "0.0.1"
 
 [[constraint]]
   name = "github.com/urfave/cli"
   version = "1.20.0"
-
-#[[constraint]]
-#  name = "github.com/sirupsen/logrus" 
-#  branch = "master"
-
-#[[constraint]]
-#  name = "github.com/konsorten/go-windows-terminal-sequences"
-#  branch = "master"
 
 [prune]
   go-tests = true

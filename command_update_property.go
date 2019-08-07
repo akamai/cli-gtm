@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strconv"
         "strings"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
@@ -65,8 +65,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if c.IsSet("dcnickname") {
 		ParseNicknames(dcNicknames, domainname)
 	}
-	if c.IsSet("servers") && len(dcDatacenters.flagList) > 1 {
-		return cli.NewExitError(color.RedString("servers update may only apply to one datacenter"), 1)
+	if c.IsSet("server") && len(dcDatacenters.flagList) > 1 {
+		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
 	}
 	if c.IsSet("weight") && len(dcDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
@@ -103,7 +103,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 					traffTarg.Weight = dcWeight
 					changes_made = true
 				}
-				if c.IsSet("servers") {
+				if c.IsSet("server") {
 					traffTarg.Servers = dcServers
 					changes_made = true
 

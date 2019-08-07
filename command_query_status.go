@@ -80,8 +80,8 @@ var defaultPeriod time.Duration = 15 * 60 * 1000 * 1000
 // Calc period start and end. Input string specifying duration, e.g. 15m. Returns formatted strings consumable by GTM Reports API.
 func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string) {
 
-	isoStart := "01-01-1980T00:00:00Z"
-	isoEnd := "01-01-1980T00:00:00Z"
+	isoStart := "2019-08-01T00:00:00Z"
+	isoEnd := "2019-08-07T00:00:00Z"
 
 	dur, err := time.ParseDuration(periodLen)
 	if err != nil {
@@ -427,8 +427,11 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 					dcpperc = " "
 					dcptr = " "
 				}
-				rowdata := []string{dclid, dcln, dctn, dcptr, dcpperc, dcip,
-					strconv.FormatBool(ip.HandedOut), fmt.Sprintf("%f", ip.Score), strconv.FormatBool(ip.Alive)}
+                                rowdata := []string{dclid, dcln, dctn, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
+                                table.Append(rowdata)
+                                rowdata = []string{"", "", "", "", "", "", fmt.Sprintf("Score: %s", fmt.Sprintf("%.2f", ip.Score))}
+                                table.Append(rowdata)
+                                rowdata = []string{"", "", "", "", "", "", fmt.Sprintf("Alive: %s", strconv.FormatBool(ip.Alive))}
 				table.Append(rowdata)
 			}
 		}

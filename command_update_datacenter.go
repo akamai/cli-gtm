@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
 
 	"github.com/fatih/color"
