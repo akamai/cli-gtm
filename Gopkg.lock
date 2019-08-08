@@ -2,7 +2,6 @@
 
 
 [[projects]]
-  branch = "master"
   digest = "1:11d88cefcc630b1fe7177079f65e9ab2e5d6e5561c43ef742f05ea6761e9a9fa"
   name = "github.com/akamai/AkamaiOPEN-edgegrid-golang"
   packages = [
@@ -14,6 +13,7 @@
   ]
   pruneopts = "UT"
   revision = "f85d9fba0c117ecabe725f3bf31a45ddfb182d85"
+  version = "v0.9.0"
 
 [[projects]]
   branch = "master"
