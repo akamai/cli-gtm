@@ -28,13 +28,13 @@ import (
 	"github.com/urfave/cli"
 )
 
-var domainname string
+var domainName string
 var qsProperty string
 var qsDatacenters *arrayFlags
 var statusPeriodLen = "15m"
 var qsNicknames []string
 
-// Data Center Traffic Status returned structure. Contains a list of individual DC stati.
+// DCTrafficStati  represents Data Center Traffic Status returned structure. Contains a list of individual DC stati.
 type DCTrafficStati struct {
 	Domain             string
 	PeriodStart        string
@@ -42,7 +42,7 @@ type DCTrafficStati struct {
 	StatusByDatacenter []*DCStatusDetail
 }
 
-// Individual data center traffic status.
+// DCStatusDetail represents individual data center traffic status.
 type DCStatusDetail struct {
 	DatacenterId       int
 	DatacenterNickname string
@@ -50,7 +50,7 @@ type DCStatusDetail struct {
 	DCStatusByProperty []*reportsgtm.DCTData
 }
 
-// Property Status returned structure. Contains a ...
+// PropertyStatus represents returned Property Status structure.
 type PropertyStatus struct {
 	Domain                   string
 	PropertyName             string
@@ -61,14 +61,14 @@ type PropertyStatus struct {
 	DatacenterIntervalStatus []*reportsgtm.PropertyTData
 }
 
-// Property IP Status Summary struct
+// PropertyStatusSummary represents Property IP Status Summary struct
 type PropertyStatusSummary struct {
 	LastUpdate       string
 	CutOff           float64
 	PropertyDCStatus []*PropertyDCStatus
 }
 
-// Property DC Status Summary struct
+// PropertyDCStatus represents Property DC Status Summary struct
 type PropertyDCStatus struct {
 	reportsgtm.IpStatPerPropDRow
 	DCTotalPeriodRequests int64
@@ -76,12 +76,11 @@ type PropertyDCStatus struct {
 }
 
 var defaultPeriod time.Duration = 15 * 60 * 1000 * 1000
+var isoStart string = "2019-08-01T00:00:00Z"
+var isoEnd string = "2019-08-07T00:00:00Z"
 
 // Calc period start and end. Input string specifying duration, e.g. 15m. Returns formatted strings consumable by GTM Reports API.
 func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string) {
-
-	isoStart := "2019-08-01T00:00:00Z"
-	isoEnd := "2019-08-07T00:00:00Z"
 
 	dur, err := time.ParseDuration(periodLen)
 	if err != nil {
@@ -109,11 +108,16 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 
 }
 
+// Retrieve Datacenter status for domain
 func gatherDatacenterStatus() (*DCTrafficStati, error) {
 
-	dcTrafficStati := &DCTrafficStati{Domain: domainname}
+	dcTrafficStati := &DCTrafficStati{Domain: domainName}
 	// calc period start and end
 	pstart, pend := calcPeriodStartandEnd("datacenter", statusPeriodLen)
+        if pstart == isoStart || pend == isoEnd {
+        	// default dates. return MT struct
+		return dcTrafficStati, nil
+        }
 	dcTrafficStati.PeriodStart = pstart
 	dcTrafficStati.PeriodEnd = pend
 	optArgs := make(map[string]string)
@@ -121,12 +125,12 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 	optArgs["end"] = pend
 
 	// Looping on DCs
-	for _, dcid := range qsDatacenters.flagList {
-		dcTStatus, err := reportsgtm.GetTrafficPerDatacenter(domainname, dcid, optArgs)
+	for _, dcID := range qsDatacenters.flagList {
+		dcTStatus, err := reportsgtm.GetTrafficPerDatacenter(domainName, dcID, optArgs)
 		if err != nil {
 			return nil, err
 		}
-		dcEntry := &DCStatusDetail{DatacenterId: dcid, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval, DCStatusByProperty: dcTStatus.DataRows}
+		dcEntry := &DCStatusDetail{DatacenterId: dcID, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval, DCStatusByProperty: dcTStatus.DataRows}
 		dcTrafficStati.StatusByDatacenter = append(dcTrafficStati.StatusByDatacenter, dcEntry)
 	}
 
@@ -134,10 +138,8 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 
 }
 
+// Retrieve IP Status and DC status for property
 func gatherPropertyStatus() (*PropertyStatus, error) {
-
-	// Use PropertyTraffic data window as period basis.
-	// Maybe do Ip Avail - most recent IPs
 
 	propStat := &PropertyStatus{PropertyName: qsProperty}
 	// calc traffic period start and end
@@ -147,25 +149,29 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 
 	// Retrieve IP Availability status
 	optArgs["mostRecent"] = "true"
-	propertyIpAvail, err := reportsgtm.GetIpStatusPerProperty(domainname, qsProperty, optArgs)
+	propertyIpAvail, err := reportsgtm.GetIpStatusPerProperty(domainName, qsProperty, optArgs)
 	if err != nil {
 		akamai.StopSpinnerFail()
 		return nil, err
 	}
-	// Retrieve Property Traffic status
-	delete(optArgs, "mostRecent")
-	optArgs["start"] = pstart
-	optArgs["end"] = pend
-	propertyTraffic, err := reportsgtm.GetTrafficPerProperty(domainname, qsProperty, optArgs)
-	if err != nil {
-		akamai.StopSpinnerFail()
-		return nil, err
-	}
-
+        var propertyTraffic *reportsgtm.PropertyTrafficResponse 
+        if pstart == isoStart || pend == isoEnd {
+                // default dates. create MT struct
+                propertyTraffic = &reportsgtm.PropertyTrafficResponse{}
+        } else {
+		// Retrieve Property Traffic status
+		delete(optArgs, "mostRecent")
+		optArgs["start"] = pstart
+		optArgs["end"] = pend
+		propertyTraffic, err = reportsgtm.GetTrafficPerProperty(domainName, qsProperty, optArgs)
+		if err != nil {
+			akamai.StopSpinnerFail()
+			return nil, err
+		}
+        }
 	// Calc requests % per datacenter
 	type dcReqs struct {
 		reqs      int64
-		totalreqs int64
 		perc      float64
 	}
 	var dcReqMap map[int]dcReqs
@@ -191,18 +197,23 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	// Build PropertyResponse struct
 	propStat.Domain = propertyIpAvail.Metadata.Domain
 	propStat.PropertyName = propertyIpAvail.Metadata.Property
-	propStat.PeriodStart = propertyTraffic.Metadata.Start
-	propStat.PeriodEnd = propertyTraffic.Metadata.End
-	propStat.ReportInterval = propertyTraffic.Metadata.Interval
+        if pstart == isoStart || pend == isoEnd {
+        	propStat.PeriodStart = "Not Available"
+        	propStat.PeriodEnd = "Not Available"
+        	propStat.ReportInterval = " "
+        } else {
+		propStat.PeriodStart = propertyTraffic.Metadata.Start
+		propStat.PeriodEnd = propertyTraffic.Metadata.End
+		propStat.ReportInterval = propertyTraffic.Metadata.Interval
+	}
 	propStat.DatacenterIntervalStatus = propertyTraffic.DataRows
-
 	var statusSummary *PropertyStatusSummary
-        statusSummary = &PropertyStatusSummary{}
+	statusSummary = &PropertyStatusSummary{}
 	if len(propertyIpAvail.DataRows) > 0 {
 		statusSummary.LastUpdate = propertyIpAvail.DataRows[0].Timestamp
 		statusSummary.CutOff = propertyIpAvail.DataRows[0].CutOff
 	} else {
-               statusSummary.LastUpdate = "Not Available"
+		statusSummary.LastUpdate = "Not Available"
 	}
 	var propertyDCStatusArray []*PropertyDCStatus
 	if len(propertyIpAvail.DataRows) > 0 {
@@ -224,6 +235,7 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 
 }
 
+// worker function for query-status
 func cmdQueryStatus(c *cli.Context) error {
 
 	config, err := akamai.GetEdgegridConfig(c)
@@ -238,7 +250,7 @@ func cmdQueryStatus(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("domain is required"), 1)
 	}
 
-	domainname = c.Args().Get(0)
+	domainName = c.Args().Get(0)
 
 	qsProperty = c.String("property")
 	qsDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
@@ -250,7 +262,7 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 	// if nicknames specified, add to dcFlags
 	if c.IsSet("dcnickname") {
-		ParseNicknames(qsNicknames, domainname)
+		ParseNicknames(qsNicknames, domainName)
 	}
 	akamai.StartSpinner(
 		"Querying status ...",
@@ -316,13 +328,14 @@ func cmdQueryStatus(c *cli.Context) error {
 
 }
 
+// Generate pretty print DC status
 func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 
-	var outstring string
-	outstring += fmt.Sprintln("Domain: ", objStatus.Domain)
-	outstring += fmt.Sprintln("Period Start: ", objStatus.PeriodStart)
-	outstring += fmt.Sprintln("Period End: ", objStatus.PeriodEnd)
-	outstring += fmt.Sprintln(" ")
+	var outString string
+	outString += fmt.Sprintln("Domain: ", objStatus.Domain)
+	outString += fmt.Sprintln("Period Start: ", objStatus.PeriodStart)
+	outString += fmt.Sprintln("Period End: ", objStatus.PeriodEnd)
+	outString += fmt.Sprintln(" ")
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
 
@@ -339,9 +352,9 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 	dclid := " "
 	dcln := " "
 	dcptl := " "
-        if len(objStatus.StatusByDatacenter) == 0 {
-		rowdata := []string{"No datacenter status available", " ", " ", " ", " ", " "}
-		table.Append(rowdata)
+	if len(objStatus.StatusByDatacenter) == 0 {
+		rowData := []string{"No datacenter status available", " ", " ", " ", " ", " "}
+		table.Append(rowData)
 	} else {
 		for _, dc := range objStatus.StatusByDatacenter {
 			for pk, dcprop := range dc.DCStatusByProperty {
@@ -360,9 +373,9 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 						dclid = " "
 						dcln = " "
 					}
-					rowdata := []string{dclid, dcln,
+					rowData := []string{dclid, dcln,
 						dcptl, prop.Name, strconv.FormatInt(prop.Requests, 10), prop.Status}
-					table.Append(rowdata)
+					table.Append(rowData)
 				}
 			}
 		}
@@ -370,25 +383,25 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 
 	table.Render()
 
-	outstring += fmt.Sprintln(tableString.String())
-	return outstring
+	outString += fmt.Sprintln(tableString.String())
+	return outString
 
 }
 
 func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 
-	var outstring string
-	outstring += fmt.Sprintln("Domain: ", objStatus.Domain)
-	outstring += fmt.Sprintln("Property: ", objStatus.PropertyName)
-	outstring += fmt.Sprintln("Period Start: ", objStatus.PeriodStart)
-	outstring += fmt.Sprintln("Period End: ", objStatus.PeriodEnd)
-	outstring += fmt.Sprintln(" ")
+	var outString string
+	outString += fmt.Sprintln("Domain: ", objStatus.Domain)
+	outString += fmt.Sprintln("Property: ", objStatus.PropertyName)
+	outString += fmt.Sprintln("Period Start: ", objStatus.PeriodStart)
+	outString += fmt.Sprintln("Period End: ", objStatus.PeriodEnd)
+	outString += fmt.Sprintln(" ")
 
 	// Build Summary Table
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-	outstring += fmt.Sprintln("Status Summary -- Last Update: ", objStatus.StatusSummary.LastUpdate, ", CutOff: ", objStatus.StatusSummary.CutOff)
-	outstring += fmt.Sprintln(" ")
+	outString += fmt.Sprintln("Status Summary -- Last Update: ", objStatus.StatusSummary.LastUpdate, ", CutOff: ", objStatus.StatusSummary.CutOff)
+	outString += fmt.Sprintln(" ")
 	table.SetHeader([]string{"Datacenter", "Nickname", "Target Name", "Total Requests", "Property Usage", "IP", "State"})
 	table.SetReflowDuringAutoWrap(false)
 	table.SetCenterSeparator(" ")
@@ -405,10 +418,10 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	dcptl := " "
 	dcptr := " "
 	dcpperc := " "
-        dcip := " "
+	dcip := " "
 	if len(objStatus.StatusSummary.PropertyDCStatus) == 0 {
-		rowdata := []string{"No status summary data available", " ", " ", " ", " ", " ", " ", " "}
-		table.Append(rowdata)
+		rowData := []string{"No status summary data available", " ", " ", " ", " ", " ", " ", " "}
+		table.Append(rowData)
 	} else {
 		for _, dc := range objStatus.StatusSummary.PropertyDCStatus {
 			dcln = dc.Nickname
@@ -427,41 +440,41 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 					dcpperc = " "
 					dcptr = " "
 				}
-                                rowdata := []string{dclid, dcln, dctn, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
-                                table.Append(rowdata)
-                                rowdata = []string{"", "", "", "", "", "", fmt.Sprintf("Score: %s", fmt.Sprintf("%.2f", ip.Score))}
-                                table.Append(rowdata)
-                                rowdata = []string{"", "", "", "", "", "", fmt.Sprintf("Alive: %s", strconv.FormatBool(ip.Alive))}
-				table.Append(rowdata)
+				rowData := []string{dclid, dcln, dctn, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
+				table.Append(rowData)
+				rowData = []string{"", "", "", "", "", "", fmt.Sprintf("Score: %s", fmt.Sprintf("%.2f", ip.Score))}
+				table.Append(rowData)
+				rowData = []string{"", "", "", "", "", "", fmt.Sprintf("Alive: %s", strconv.FormatBool(ip.Alive))}
+				table.Append(rowData)
 			}
 		}
 	}
 	table.Render()
-	outstring += fmt.Sprintln(tableString.String())
+	outString += fmt.Sprintln(tableString.String())
 
 	// Build Datacenter Status table
-	outstring += fmt.Sprintln(" ")
-        outstring += fmt.Sprintln("Datacenter Status")
-	outstring += fmt.Sprintln(" ")
+	outString += fmt.Sprintln(" ")
+	outString += fmt.Sprintln("Datacenter Status")
+	outString += fmt.Sprintln(" ")
 	tableString = &strings.Builder{}
-	dctable := tablewriter.NewWriter(tableString)
+	dcTable := tablewriter.NewWriter(tableString)
 
-	dctable.SetHeader([]string{"Timestamp", "Datacenter", "Nickname", "Requests", "Status"})
-	dctable.SetReflowDuringAutoWrap(false)
-	dctable.SetCenterSeparator(" ")
-	dctable.SetColumnSeparator(" ")
-	dctable.SetRowSeparator(" ")
-	dctable.SetBorder(false)
-	dctable.SetAutoWrapText(false)
-	dctable.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
-	dctable.SetAlignment(tablewriter.ALIGN_CENTER)
+	dcTable.SetHeader([]string{"Timestamp", "Datacenter", "Nickname", "Requests", "Status"})
+	dcTable.SetReflowDuringAutoWrap(false)
+	dcTable.SetCenterSeparator(" ")
+	dcTable.SetColumnSeparator(" ")
+	dcTable.SetRowSeparator(" ")
+	dcTable.SetBorder(false)
+	dcTable.SetAutoWrapText(false)
+	dcTable.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
+	dcTable.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	dclid = " "
 	dcln = " "
 	dcptl = " "
 	if len(objStatus.DatacenterIntervalStatus) == 0 {
-		rowdata := []string{"No datacenter interval status available", " ", " ", " ", " "}
-                dctable.Append(rowdata)
+		rowData := []string{"No datacenter interval status available", " ", " ", " ", " "}
+		dcTable.Append(rowData)
 	} else {
 		for _, dcis := range objStatus.DatacenterIntervalStatus {
 			dcptl = dcis.Timestamp
@@ -471,16 +484,16 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 				} else {
 					dcptl = " "
 				}
-                        	dcln = dc.Nickname
-	                	dclid = strconv.Itoa(dc.DatacenterId)
-				rowdata := []string{dcptl, dclid, dcln, strconv.FormatInt(dc.Requests, 10), dc.Status}
-				dctable.Append(rowdata)
+				dcln = dc.Nickname
+				dclid = strconv.Itoa(dc.DatacenterId)
+				rowData := []string{dcptl, dclid, dcln, strconv.FormatInt(dc.Requests, 10), dc.Status}
+				dcTable.Append(rowData)
 			}
 		}
 	}
-	dctable.Render()
+	dcTable.Render()
 
-	outstring += fmt.Sprintln(tableString.String())
-	return outstring
+	outString += fmt.Sprintln(tableString.String())
+	return outString
 
 }

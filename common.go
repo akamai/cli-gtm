@@ -15,26 +15,30 @@
 package main
 
 import (
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	"github.com/urfave/cli"
 	"strconv"
 )
 
+// SuccUpdateShort is the success status structure for no verbose status updates
 type SuccUpdateShort struct {
 	PropName string
 	ChangeId string
 }
 
+// SuccUpdateVerbose is the success status structure for verbose status updates
 type SuccUpdateVerbose struct {
 	PropName string
 	RespStat *configgtm.ResponseStatus
 }
 
+// FailUpdate is the failure status structure for no verbose status updates
 type FailUpdate struct {
 	PropName string
 	FailMsg  string
 }
 
+// UpdateSummary is the result summary status structure 
 type UpdateSummary struct {
 	Updated_Properties interface{}
 	Failed_Updates     []*FailUpdate
@@ -42,11 +46,11 @@ type UpdateSummary struct {
 
 var verboseStatus bool
 
-// parse any nicknames provided and add to dcFlags
-func ParseNicknames(nicknames cli.StringSlice, domainname string) {
+// ParseNicknames parses any nicknames provided and adds to dcFlags
+func ParseNicknames(nicknames cli.StringSlice, domain string) {
 
 	// get list of data centers
-	dcList, _ := configgtm.ListDatacenters(domainname)
+	dcList, _ := configgtm.ListDatacenters(domain)
 	// walk thru datacenters and nicknames
 	for _, dc := range dcList {
 		for _, nn := range nicknames {

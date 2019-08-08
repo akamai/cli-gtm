@@ -17,15 +17,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
-        "strings"
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	"strconv"
+	"strings"
 )
 
+// worker function for update-property
 func cmdUpdateProperty(c *cli.Context) error {
 
 	var dcWeight float64
@@ -47,8 +48,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("domain and property are required"), 1)
 	}
 
-	domainname := c.Args().Get(0)
-	propertyname := c.Args().Get(1)
+	domainName := c.Args().Get(0)
+	propertyName := c.Args().Get(1)
 
 	// Changes may be to enabled, weight or servers
 	dcWeight = c.Float64("weight")
@@ -63,7 +64,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	}
 	// if nicknames specified, add to dcFlags
 	if c.IsSet("dcnickname") {
-		ParseNicknames(dcNicknames, domainname)
+		ParseNicknames(dcNicknames, domainName)
 	}
 	if c.IsSet("server") && len(dcDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
@@ -74,10 +75,10 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	akamai.StartSpinner(
 		"Updating property ...",
-		fmt.Sprintf("Fetching "+propertyname+" ...... [%s]", color.GreenString("OK")),
+		fmt.Sprintf("Fetching "+propertyName+" ...... [%s]", color.GreenString("OK")),
 	)
 
-	property, err := configgtm.GetProperty(propertyname, domainname)
+	property, err := configgtm.GetProperty(propertyName, domainName)
 	if err != nil {
 		akamai.StopSpinnerFail()
 		return cli.NewExitError(color.RedString("Property not found"), 1)
@@ -85,15 +86,15 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	changes_made := false
 
-	fmt.Println("Property: " + property.Name)
+	fmt.Println(fmt.Sprintf("Property: %s", property.Name))
 	trafficTargets := property.TrafficTargets
-	targetsmsg := property.Name + " contains " + strconv.Itoa(len(trafficTargets)) + " targets"
+	targetsmsg := fmt.Sprintf("%s contains %s targets", property.Name, strconv.Itoa(len(trafficTargets)))
 	fmt.Println(targetsmsg)
 	fmt.Sprintf(targetsmsg)
 	for _, traffTarg := range trafficTargets {
-		for _, dcid := range dcDatacenters.flagList {
-			if traffTarg.DatacenterId == dcid {
-				fmt.Sprintf(traffTarg.Name + " contains dc " + strconv.Itoa(dcid))
+		for _, dcID := range dcDatacenters.flagList {
+			if traffTarg.DatacenterId == dcID {
+				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 				if c.IsSet("enabled") && traffTarg.Enabled != dcEnabled {
 					traffTarg.Enabled = dcEnabled
 					changes_made = true
@@ -128,40 +129,40 @@ func cmdUpdateProperty(c *cli.Context) error {
 		}
 	}
 	if changes_made {
-		propstat, err := property.Update(domainname)
+		propStat, err := property.Update(domainName)
 		if err != nil {
 			akamai.StopSpinnerFail()
-			return cli.NewExitError(color.RedString("Error updating property "+propertyname+". "+err.Error()), 1)
+			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
 		}
-		fmt.Fprintln(c.App.Writer, "Property "+propertyname+" updated")
+		fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
 
 		var status interface{}
 
 		if c.IsSet("verbose") && verboseStatus {
-			status = propstat
+			status = propStat
 		} else {
-			status = "ChangeId: " + propstat.ChangeId
+			status = fmt.Sprintf("ChangeId: %s", propStat.ChangeId)
 		}
 
-        	if c.IsSet("json") && c.Bool("json") {
-                	json, err := json.MarshalIndent(status, "", "  ")
-                	if err != nil {
-                        	akamai.StopSpinnerFail()
-                        	return cli.NewExitError(color.RedString("Unable to display status results"), 1)
-                	}
-                	fmt.Fprintln(c.App.Writer, string(json))
-        	} else {
-                	fmt.Fprintln(c.App.Writer, "")
-                	if c.IsSet("verbose") && verboseStatus {
- 				fmt.Fprintln(c.App.Writer, renderStatus(status.(*configgtm.ResponseStatus), c))
-                	} else {
+		if c.IsSet("json") && c.Bool("json") {
+			json, err := json.MarshalIndent(status, "", "  ")
+			if err != nil {
+				akamai.StopSpinnerFail()
+				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+			}
+			fmt.Fprintln(c.App.Writer, string(json))
+		} else {
+			fmt.Fprintln(c.App.Writer, "")
+			if c.IsSet("verbose") && verboseStatus {
+				fmt.Fprintln(c.App.Writer, renderStatus(status.(*configgtm.ResponseStatus), c))
+			} else {
 				fmt.Fprintln(c.App.Writer, "Response Status")
-                                fmt.Fprintln(c.App.Writer, " ")
-                        	fmt.Fprintln(c.App.Writer, status)
-                	}
-                }
+				fmt.Fprintln(c.App.Writer, " ")
+				fmt.Fprintln(c.App.Writer, status)
+			}
+		}
 	} else {
-		fmt.Fprintln(c.App.Writer, "No update required for Property "+propertyname)
+		fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
 	}
 
 	akamai.StopSpinnerOk()
@@ -170,39 +171,40 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 }
 
+// Pretty print output
 func renderStatus(status *configgtm.ResponseStatus, c *cli.Context) string {
 
-        var outstring string
-        outstring += fmt.Sprintln(" ")
-        outstring += fmt.Sprintln("Response Status")
-        outstring += fmt.Sprintln(" ")
-        tableString := &strings.Builder{}
-        table := tablewriter.NewWriter(tableString)
+	var outString string
+	outString += fmt.Sprintln(" ")
+	outString += fmt.Sprintln("Response Status")
+	outString += fmt.Sprintln(" ")
+	tableString := &strings.Builder{}
+	table := tablewriter.NewWriter(tableString)
 
-        table.SetReflowDuringAutoWrap(false)
-        table.SetCenterSeparator(" ")
-        table.SetColumnSeparator(" ")
-        table.SetRowSeparator(" ")
-        table.SetBorder(false)
-        table.SetAutoWrapText(false)
-        table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
-        table.SetAlignment(tablewriter.ALIGN_CENTER)
+	table.SetReflowDuringAutoWrap(false)
+	table.SetCenterSeparator(" ")
+	table.SetColumnSeparator(" ")
+	table.SetRowSeparator(" ")
+	table.SetBorder(false)
+	table.SetAutoWrapText(false)
+	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
-        rowdata := []string{"ChangeId", status.ChangeId}
-        table.Append(rowdata)
-        rowdata = []string{"Message", status.Message}
-        table.Append(rowdata)
-        rowdata = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
-        table.Append(rowdata)
-        rowdata = []string{"Propagation Status", status.PropagationStatus}
-        table.Append(rowdata)
-        rowdata = []string{"Propagation Status Date", status.PropagationStatusDate}
-        table.Append(rowdata)
+	rowData := []string{"ChangeId", status.ChangeId}
+	table.Append(rowData)
+	rowData = []string{"Message", status.Message}
+	table.Append(rowData)
+	rowData = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
+	table.Append(rowData)
+	rowData = []string{"Propagation Status", status.PropagationStatus}
+	table.Append(rowData)
+	rowData = []string{"Propagation Status Date", status.PropagationStatusDate}
+	table.Append(rowData)
 
-        table.Render()
-        outstring += fmt.Sprintln(tableString.String())
+	table.Render()
+	outString += fmt.Sprintln(tableString.String())
 
-        return outstring
+	return outString
 
 }
