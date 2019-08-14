@@ -54,7 +54,12 @@ func cmdUpdateProperty(c *cli.Context) error {
 	// Changes may be to enabled, weight or servers
 	dcWeight = c.Float64("weight")
 	dcServers = c.StringSlice("server")
-	dcEnabled = c.BoolT("enabled")
+        if c.IsSet("enabled") {
+		dcEnabled, err = parseBoolString(c.String("enabled"))
+        	if err != nil {
+			return cli.NewExitError(color.RedString(fmt.Sprintf("enabled: %s", err.Error())), 1)
+		}
+        }
 	dcDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
 	dcNicknames = c.StringSlice("dcnickname")
 	verboseStatus = c.Bool("verbose")

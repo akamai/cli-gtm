@@ -17,7 +17,7 @@ package main
 import (
 	"strconv"
 	"strings"
-
+	"errors"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/urfave/cli"
 )
@@ -64,6 +64,16 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
+func parseBoolString(val string) (bool, error) {
+	boolVal := strings.ToLower(val)
+	if boolVal == "true" {
+		return true, nil
+	} else if boolVal == "false" {
+		return false, nil 
+	}
+	return true, errors.New("Invalid value provided. Acceptable values: true, false")
+}
+
 var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 	var commands []cli.Command
 
@@ -82,17 +92,17 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "dcnickname",
 				Usage: "Apply change to specified datacenter by nickname.",
 			},
-			cli.BoolTFlag{
+			cli.StringFlag{
 				Name:  "enabled",
-				Usage: "Apply 'enabled' state specified. Default is true.",
+				Usage: "Apply 'enabled' state (true|false) to specified datacenter(s).",
 			},
 			cli.BoolFlag{
 				Name:  "verbose",
-				Usage: "Display verbose result status. Default is false.",
+				Usage: "Display verbose result status.",
 			},
 			cli.BoolFlag{
 				Name:  "json",
-				Usage: "Return status in JSON format. Default is false.",
+				Usage: "Return status in JSON format.",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
@@ -113,9 +123,9 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "dcnickname",
 				Usage: "Apply change to specified datacenter by nickname.",
 			},
-			cli.BoolTFlag{
+			cli.StringFlag{
 				Name:  "enabled",
-				Usage: "Apply 'enabled' state specified. Default is true.",
+				Usage: "Apply 'enabled' state (true|false) to specified datacenter(s).",
 			},
 			cli.Float64Flag{
 				Name:  "weight",
@@ -123,15 +133,15 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.StringSliceFlag{
 				Name:  "server",
-				Usage: "Update target server for specified datacenter. Multiple flags may be specified.",
+				Usage: "Update target server for specified datacenter. Multiple server flags may be specified.",
 			},
 			cli.BoolFlag{
 				Name:  "verbose",
-				Usage: "Display verbose result status. Default is false.",
+				Usage: "Display verbose result status.",
 			},
 			cli.BoolFlag{
 				Name:  "json",
-				Usage: "Return status in JSON format. Default is false.",
+				Usage: "Return status in JSON format.",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
@@ -158,11 +168,11 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.BoolFlag{
 				Name:  "verbose",
-				Usage: "Display verbose status. Default is false.",
+				Usage: "Display verbose status.",
 			},
 			cli.BoolFlag{
 				Name:  "json",
-				Usage: "Return status in JSON format. Default is false.",
+				Usage: "Return status in JSON format.",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,

@@ -58,7 +58,7 @@ Built-In Commands:
 To enable one or more datacenters:
 
 ```
-$ akamai gtm update-datacenter gtmdomtest.akadns.net --datacenterid 3131 --datacenterid 3132 --enabled=true
+$ akamai gtm update-datacenter example.akadns.net --datacenterid 3131 --datacenterid 3132 --enabled true
 ```
 
 ### Update datacenters in property
@@ -66,19 +66,19 @@ $ akamai gtm update-datacenter gtmdomtest.akadns.net --datacenterid 3131 --datac
 To enable datacenters in a property:
 
 ```
-$ akamai gtm update-property gtmdomtest.akadns.net testproperty --datacenterid 3131 --enabled=false
+$ akamai gtm update-property example.akadns.net testproperty --datacenterid 3131 --enabled false
 ```
 
 To modify a datacenter's weight:                                    
 
 ```
-$ akamai gtm update-property gtmdomtest.akadns.net testproperty --datacenterid 3131 --weight 20
+$ akamai gtm update-property example.akadns.net testproperty --datacenterid 3131 --weight 20
 ```
 
 To midify a datacenter's servers:
 
 ```
-$ akamai gtm update-property gtmdomtest.akadns.net testproperty --datacenterid 3131 --server 1.2.3.6 --server 1.2.1.1
+$ akamai gtm update-property example.akadns.net testproperty --datacenterid 3131 --server 1.2.3.6 --server 1.2.1.1
 ```
 
 ### Query Status 
@@ -86,13 +86,13 @@ $ akamai gtm update-property gtmdomtest.akadns.net testproperty --datacenterid 3
 Query a dayacenter's status:
 
 ```
-$ akamai gtm query-status gtmtest.akadns.net --datacenterid 3132
+$ akamai gtm query-status example.akadns.net --datacenterid 3132
 ```
 
 To query a property's status:
 
 ```
-$ akamai gtm query-status gtmtest.akadns.net --property testproperty
+$ akamai gtm query-status example.akadns.net --property testproperty
 ```
 
 ## License
