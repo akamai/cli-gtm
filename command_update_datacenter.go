@@ -21,15 +21,15 @@ import (
 	akamai "github.com/akamai/cli-common-golang"
 	"strconv"
 	"strings"
-
+	"time"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 )
 
-var dcEnabled bool
+var dcEnabled bool = true
+var dcComplete bool = false
 var dcDatacenters *arrayFlags
-var dcNicknames []string
 
 var succShortArray []*SuccUpdateShort
 var succVerboseArray []*SuccUpdateVerbose
@@ -51,23 +51,24 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	domainName := c.Args().First()
-	dcDatacenters = c.Generic("datacenterid").(*arrayFlags)
-        if !c.IsSet("enabled") {
-                cli.ShowCommandHelp(c, c.Command.Name)
-                return cli.NewExitError(color.RedString("new enabled state is required"), 1)
-        } 
-        dcEnabled, err := parseBoolString(c.String("enabled"))
-        if err != nil {
-               	return cli.NewExitError(color.RedString(fmt.Sprintf("enabled: %s", err.Error())), 1)
+	dcDatacenters = c.Generic("datacenter").(*arrayFlags)
+        if c.IsSet("enable") && c.IsSet("disable") {
+                return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+        } else if c.IsSet("enable") {
+                dcEnabled = true
+        } else if c.IsSet("disable") {
+                dcEnabled = false
         }
-	verboseStatus = c.Bool("verbose")
-	dcNicknames = c.StringSlice("dcnickname")
-
+        if c.IsSet("verbose") {
+                verboseStatus = true
+        }
+        if c.IsSet("complete") {
+                dcComplete = true
+        }
 	// if nicknames specified, add to dcFlags
-	if c.IsSet("dcnickname") {
-		ParseNicknames(dcNicknames, domainName)
-	}
-	if (!c.IsSet("datacenterid") && !c.IsSet("dcnickname")) || len(dcDatacenters.flagList) == 0 {
+        ParseNicknames(dcDatacenters.nicknamesList, domainName)
+
+	if !c.IsSet("datacenter") || len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
 	}
@@ -85,7 +86,6 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		akamai.StopSpinnerFail()
 		return cli.NewExitError(color.RedString("Domain "+domainName+" not found "), 1)
 	}
-
 	properties := dom.Properties
 	propmsg := fmt.Sprintf("%s contains %s properties", domainName, strconv.Itoa(len(properties)))
 	fmt.Sprintf(propmsg)
@@ -100,7 +100,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		for _, traffTarg := range trafficTargets {
 			dcs := dcDatacenters
 			for _, dcID := range dcs.flagList {
-				if traffTarg.DatacenterId == dcID && c.IsSet("enabled") && traffTarg.Enabled != dcEnabled {
+				if traffTarg.DatacenterId == dcID && (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != dcEnabled {
 					fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 					traffTarg.Enabled = dcEnabled
 					changes_made = true
@@ -122,6 +122,42 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				}
 			}
 		}
+	}
+
+	if dcComplete && (len(succVerboseArray) > 0 || len(succShortArray) > 0) {
+                var defaultInterval int = 5
+                var defaultTimeout int = 300
+                var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
+                var sleepTimeout time.Duration = 1 // seconds. TODO: Should be configurable by user ...
+                sleepInterval *= time.Duration(defaultInterval)
+                sleepTimeout *= time.Duration(defaultTimeout)
+		fmt.Println(" ")
+		fmt.Printf("Waiting for completion .")
+                for {
+                        dStat, err := configgtm.GetDomainStatus(domainName)
+			if err != nil {
+				fmt.Println(" ")
+				fmt.Println("Unable to retrieve domain status.")
+                                break
+                        }
+                	fmt.Printf(".")
+                        time.Sleep(sleepInterval * time.Second)
+                        sleepTimeout -= sleepInterval
+                        if dStat.PropagationStatus == "COMPLETE" {
+				fmt.Println(" ")
+                                fmt.Println("Change deployed")
+                                break
+                        } else if dStat.PropagationStatus == "DENIED" {
+				fmt.Println(" ")
+                                fmt.Println("Change denied")
+                                break
+                        }
+                        if sleepTimeout <= 0 {
+                                fmt.Println(" ")
+                                fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+                                break
+                        }
+                }
 	}
 
 	if len(properties) == 1 && len(failedArray) > 0 {

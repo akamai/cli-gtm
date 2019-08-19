@@ -25,6 +25,7 @@ import (
 type arrayFlags struct {
 	flagList       []int
 	flagStringList []string
+        nicknamesList   []string
 }
 
 var dcFlags arrayFlags
@@ -55,10 +56,14 @@ func (i *arrayFlags) Set(value string) error {
 			return nil
 		}
 	}
+        // See if its an id vs nickname
 	intVal, err := strconv.Atoi(value)
 	if err != nil {
-		return err
+                // nickname. save for later processing (need domain to map)
+		i.nicknamesList = append(i.nicknamesList, value)
+		return nil
 	}
+
 	i.flagList = append(i.flagList, intVal)
 	i.flagStringList = append(i.flagStringList, value)
 	return nil
@@ -84,18 +89,18 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		Action:      cmdUpdateDatacenter,
 		Flags: []cli.Flag{
 			cli.GenericFlag{
-				Name:  "datacenterid",
-				Usage: "Apply change to specified datacenter by id.",
+				Name:  "datacenter",
+				Usage: "Apply change to specified datacenter by id or nickname.",
 				Value: &dcFlags,
 			},
-			cli.StringSliceFlag{
-				Name:  "dcnickname",
-				Usage: "Apply change to specified datacenter by nickname.",
+			cli.BoolTFlag{
+				Name:  "enable",
+				Usage: "Enable specified datacenter(s).",
 			},
-			cli.StringFlag{
-				Name:  "enabled",
-				Usage: "Apply 'enabled' state (true|false) to specified datacenter(s).",
-			},
+                        cli.BoolFlag{
+                                Name:  "disable",
+                                Usage: "Disable specified datacenter(s).",
+                        },
 			cli.BoolFlag{
 				Name:  "verbose",
 				Usage: "Display verbose result status.",
@@ -104,6 +109,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "json",
 				Usage: "Return status in JSON format.",
 			},
+                        cli.BoolFlag{
+                                Name:  "complete",
+                                Usage: "Wait up to 5 minutes for change completion.",
+                        },
 		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})
@@ -114,18 +123,18 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		ArgsUsage:   "[domain, property]",
 		Action:      cmdUpdateProperty,
 		Flags: []cli.Flag{
-			cli.GenericFlag{
-				Name:  "datacenterid",
-				Usage: "Apply change to specified datacenter by id.",
-				Value: &dcFlags,
-			},
-			cli.StringSliceFlag{
-				Name:  "dcnickname",
-				Usage: "Apply change to specified datacenter by nickname.",
-			},
-			cli.StringFlag{
-				Name:  "enabled",
-				Usage: "Apply 'enabled' state (true|false) to specified datacenter(s).",
+                        cli.GenericFlag{
+                                Name:  "datacenter",
+                                Usage: "Apply change to specified datacenter by id or nickname.",
+                                Value: &dcFlags,
+                        },
+                        cli.BoolTFlag{
+                                Name:  "enable",
+                                Usage: "Enable specified datacenter(s).",
+                        },
+                        cli.BoolFlag{
+                                Name:  "disable",
+                                Usage: "Disable specified datacenter(s).",
 			},
 			cli.Float64Flag{
 				Name:  "weight",
@@ -143,24 +152,24 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "json",
 				Usage: "Return status in JSON format.",
 			},
+                        cli.BoolFlag{
+                                Name:  "complete",
+                                Usage: "Wait up to 5 minutes for change completion",
+                        },
 		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})
 
 	commands = append(commands, cli.Command{
 		Name:        "query-status",
-		Description: "Query current status of property or datacenter",
+		Description: "Query current status of domain, property or datacenter",
 		ArgsUsage:   "<domain>",
 		Action:      cmdQueryStatus,
 		Flags: []cli.Flag{
 			cli.GenericFlag{
-				Name:  "datacenterid",
-				Usage: "Report status of specified datacenter by id.",
+				Name:  "datacenter",
+				Usage: "Report status of specified datacenter by id or nickname.",
 				Value: &dcFlags,
-			},
-			cli.StringSliceFlag{
-				Name:  "dcnickname",
-				Usage: "Apply change to specified datacenter by nickname.",
 			},
 			cli.StringFlag{
 				Name:  "property",

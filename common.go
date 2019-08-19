@@ -16,7 +16,6 @@ package main
 
 import (
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
-	"github.com/urfave/cli"
 	"strconv"
 )
 
@@ -44,10 +43,10 @@ type UpdateSummary struct {
 	Failed_Updates     []*FailUpdate
 }
 
-var verboseStatus bool
+var verboseStatus bool = false
 
 // ParseNicknames parses any nicknames provided and adds to dcFlags
-func ParseNicknames(nicknames cli.StringSlice, domain string) {
+func ParseNicknames(nicknames []string, domain string) {
 
 	// get list of data centers
 	dcList, _ := configgtm.ListDatacenters(domain)

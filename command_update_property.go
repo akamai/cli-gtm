@@ -24,18 +24,17 @@ import (
 	"github.com/urfave/cli"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // worker function for update-property
 func cmdUpdateProperty(c *cli.Context) error {
 
-	var dcWeight float64
-	var dcServers []string
-	var dcEnabled bool
-	var dcDatacenters *arrayFlags
-	var verboseStatus bool
-	var dcNicknames []string
-
+	var pWeight float64
+	var pServers []string
+	var pEnabled bool = true
+	var pDatacenters *arrayFlags
+        var pComplete bool = false
 	config, err := akamai.GetEdgegridConfig(c)
 	if err != nil {
 		return err
@@ -52,29 +51,32 @@ func cmdUpdateProperty(c *cli.Context) error {
 	propertyName := c.Args().Get(1)
 
 	// Changes may be to enabled, weight or servers
-	dcWeight = c.Float64("weight")
-	dcServers = c.StringSlice("server")
-        if c.IsSet("enabled") {
-		dcEnabled, err = parseBoolString(c.String("enabled"))
-        	if err != nil {
-			return cli.NewExitError(color.RedString(fmt.Sprintf("enabled: %s", err.Error())), 1)
-		}
+	pWeight = c.Float64("weight")
+	pServers = c.StringSlice("server")
+        if c.IsSet("enable") && c.IsSet("disable") {
+		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+        } else if c.IsSet("enable") {
+		pEnabled = true 
+	} else if c.IsSet("disable") {
+                pEnabled = false 
         }
-	dcDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
-	dcNicknames = c.StringSlice("dcnickname")
-	verboseStatus = c.Bool("verbose")
-
-	if !c.IsSet("datacenterid") && !c.IsSet("dcnickname") {
+	pDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+        if c.IsSet("verbose") {
+		verboseStatus = true
+	}
+        if c.IsSet("complete") {
+		pComplete = true
+	}
+	if !c.IsSet("datacenter") {
 		return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
-	if c.IsSet("dcnickname") {
-		ParseNicknames(dcNicknames, domainName)
-	}
-	if c.IsSet("server") && len(dcDatacenters.flagList) > 1 {
+	ParseNicknames(pDatacenters.nicknamesList, domainName)
+
+	if c.IsSet("server") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
 	}
-	if c.IsSet("weight") && len(dcDatacenters.flagList) > 1 {
+	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
 	}
 
@@ -97,33 +99,33 @@ func cmdUpdateProperty(c *cli.Context) error {
 	fmt.Println(targetsmsg)
 	fmt.Sprintf(targetsmsg)
 	for _, traffTarg := range trafficTargets {
-		for _, dcID := range dcDatacenters.flagList {
+		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterId == dcID {
 				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
-				if c.IsSet("enabled") && traffTarg.Enabled != dcEnabled {
-					traffTarg.Enabled = dcEnabled
+				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
+					traffTarg.Enabled = pEnabled
 					changes_made = true
 				}
-				if c.IsSet("weight") && traffTarg.Weight != dcWeight {
+				if c.IsSet("weight") && traffTarg.Weight != pWeight {
 					// Note: weight will be ignored for a number of property types
-					traffTarg.Weight = dcWeight
+					traffTarg.Weight = pWeight
 					changes_made = true
 				}
 				if c.IsSet("server") {
-					traffTarg.Servers = dcServers
+					traffTarg.Servers = pServers
 					changes_made = true
 
 					/*
 					   // See if we really are updating ...
-					   if len(dcServers) != len(traffTarg.Servers) {
-					           traffTarg.Servers = dcServers
+					   if len(pServers) != len(traffTarg.Servers) {
+					           traffTarg.Servers = pServers
 					           changes_made = true
 					   } else {
-					           sort.Sort(dcServers)
+					           sort.Sort(pServers)
 					           sort.Sort(traffTarg.Servers)
 					           for i, v := range traffTarg.Servers {
-					                   if v != dcServers[i] {
-					                           traffTarg.Servers = dcServers
+					                   if v != pServers[i] {
+					                           traffTarg.Servers = pServers
 					                           changes_made = true
 					                   }
 					           }
@@ -139,6 +141,40 @@ func cmdUpdateProperty(c *cli.Context) error {
 			akamai.StopSpinnerFail()
 			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
 		}
+
+                // wait to complete?
+		if pComplete && propStat.PropagationStatus == "PENDING" {
+                        var defaultInterval int = 5
+  			var defaultTimeout int = 300
+			var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
+			var sleepTimeout time.Duration = 1 // seconds. TODO: Should be configurable by user ... 
+                        sleepInterval *= time.Duration(defaultInterval)
+			sleepTimeout *= time.Duration(defaultTimeout) 
+			fmt.Println(" ")
+			fmt.Printf("Waiting for completion .")
+                        for {
+				fmt.Printf(".")
+				time.Sleep(sleepInterval * time.Second) 
+				sleepTimeout -= sleepInterval
+				if propStat.PropagationStatus == "COMPLETE" {
+					fmt.Println(" ")
+					fmt.Println("Change deployed")
+					break
+				}
+                                if sleepTimeout <= 0 {
+					fmt.Println(" ")
+                                        fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+                                        break
+                                }       
+				propStat, err = configgtm.GetDomainStatus(domainName)
+				if err != nil {
+					fmt.Println(" ")
+                                        fmt.Println("Unable to retrieve domain status")
+					break
+				}
+			}
+		}
+
 		fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
 
 		var status interface{}

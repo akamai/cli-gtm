@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/reportsgtm-v1"
+        "github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
@@ -138,7 +139,19 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 
 }
 
-// Retrieve IP Status and DC status for property
+// Retrieve Domain status
+func getDomainStatus() (*configgtm.ResponseStatus, error) {
+
+	domStatus, err := configgtm.GetDomainStatus(domainName)
+        if err != nil {
+                return nil, err
+        }
+
+	return domStatus, nil
+
+}
+
+// Retrieve Status and DC status for property
 func gatherPropertyStatus() (*PropertyStatus, error) {
 
 	propStat := &PropertyStatus{PropertyName: qsProperty}
@@ -244,6 +257,7 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 
 	reportsgtm.Init(config)
+        configgtm.Init(config)
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
@@ -253,17 +267,15 @@ func cmdQueryStatus(c *cli.Context) error {
 	domainName = c.Args().Get(0)
 
 	qsProperty = c.String("property")
-	qsDatacenters = (c.Generic("datacenterid")).(*arrayFlags)
-	qsNicknames = c.StringSlice("dcnickname")
-	verboseStatus = c.Bool("verbose")
+	qsDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+        if c.IsSet("verbose") {
+		verboseStatus = true
+	}
 
-	if (!c.IsSet("datacenterid") && !c.IsSet("dcnickname") && !c.IsSet("property")) || (c.IsSet("property") && (c.IsSet("datacenterid") || c.IsSet("dcnickname"))) {
+	if c.IsSet("property") && c.IsSet("datacenter") {
 		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
 	}
-	// if nicknames specified, add to dcFlags
-	if c.IsSet("dcnickname") {
-		ParseNicknames(qsNicknames, domainName)
-	}
+	ParseNicknames(qsDatacenters.nicknamesList, domainName)
 	akamai.StartSpinner(
 		"Querying status ...",
 		fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),
@@ -271,33 +283,25 @@ func cmdQueryStatus(c *cli.Context) error {
 
 	var objStatus interface{}
 
-	if c.IsSet("datacenterid") {
+	if c.IsSet("datacenter") {
 		fmt.Println("... Collecting DC status")
 		objStatus, err = gatherDatacenterStatus()
-		if err != nil {
-			akamai.StopSpinnerFail()
-			if verboseStatus {
-				return cli.NewExitError(color.RedString("Unable to retrieve datacenter status. "+err.Error()), 1)
-			} else {
-				return cli.NewExitError(color.RedString("Unable to retrieve datacenter status."), 1)
-			}
-		}
 	} else if c.IsSet("property") {
 		fmt.Println("... Collecting Property status")
 		objStatus, err = gatherPropertyStatus()
-		if err != nil {
-			akamai.StopSpinnerFail()
-			if verboseStatus {
-				return cli.NewExitError(color.RedString("Unable to retrieve property status. "+err.Error()), 1)
-			} else {
-				return cli.NewExitError(color.RedString("Unable to retrieve property status."), 1)
-			}
-		}
 	} else {
-		// Shouldn't be able to get here but ....
-		akamai.StopSpinnerFail()
-		return cli.NewExitError(color.RedString("Unknown object status requested"), 1)
+                fmt.Println("... Collecting Domain status")
+		objStatus, err = getDomainStatus()
 	}
+        // check for failure
+        if err != nil {
+                akamai.StopSpinnerFail()
+                if verboseStatus {
+                        return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
+                } else {
+                        return cli.NewExitError(color.RedString("Unable to retrieve status."), 1)
+                }       
+        }      
 
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
@@ -313,7 +317,7 @@ func cmdQueryStatus(c *cli.Context) error {
 		akamai.StopSpinnerOk()
 
 		fmt.Fprintln(c.App.Writer, "")
-		if c.IsSet("datacenterid") {
+		if c.IsSet("datacenter") {
 
 			fmt.Fprintln(c.App.Writer, renderDatacenterTable(objStatus.(*DCTrafficStati), c))
 
@@ -321,7 +325,9 @@ func cmdQueryStatus(c *cli.Context) error {
 
 			fmt.Fprintln(c.App.Writer, renderPropertyTable(objStatus.(*PropertyStatus), c))
 
-		}
+		} else {
+			fmt.Fprintln(c.App.Writer, renderDomainTable(objStatus.(*configgtm.ResponseStatus), c))
+                }
 	}
 
 	return nil
@@ -497,3 +503,43 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	return outString
 
 }
+
+// Pretty print output
+func renderDomainTable(status *configgtm.ResponseStatus, c *cli.Context) string {
+
+        var outString string
+        outString += fmt.Sprintln(" ")
+        outString += fmt.Sprintln(fmt.Sprintf("Domain: %s", domainName))
+        outString += fmt.Sprintln("Current Status")
+        outString += fmt.Sprintln(" ")
+        tableString := &strings.Builder{}
+        table := tablewriter.NewWriter(tableString)
+
+        table.SetReflowDuringAutoWrap(false)
+        table.SetCenterSeparator(" ")
+        table.SetColumnSeparator(" ")
+        table.SetRowSeparator(" ")
+        table.SetBorder(false)
+        table.SetAutoWrapText(false)
+        table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+        table.SetAlignment(tablewriter.ALIGN_CENTER)
+
+        // Build status table. Exclude Links.
+        rowData := []string{"ChangeId", status.ChangeId}
+        table.Append(rowData)
+        rowData = []string{"Message", status.Message}
+        table.Append(rowData)
+        rowData = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
+        table.Append(rowData)
+        rowData = []string{"Propagation Status", status.PropagationStatus}
+        table.Append(rowData)
+        rowData = []string{"Propagation Status Date", status.PropagationStatusDate}
+        table.Append(rowData)
+
+        table.Render()
+        outString += fmt.Sprintln(tableString.String())
+
+        return outString
+
+}
+
