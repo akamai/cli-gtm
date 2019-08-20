@@ -203,7 +203,11 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	}
 	// Calculate percentage for WHOLE period
 	for k, dcRow := range dcReqMap {
-		dcRow.perc = (float64(dcRow.reqs) / float64(propertyTotalReqs)) * 100
+		if propertyTotalReqs > 0 {
+			dcRow.perc = (float64(dcRow.reqs) / float64(propertyTotalReqs)) * 100
+		} else {
+			dcRow.perc = float64(0)
+		}
 		dcReqMap[k] = dcRow
 	}
 
