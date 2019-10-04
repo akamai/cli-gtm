@@ -66,8 +66,14 @@ func cmdUpdateDatacenter(c *cli.Context) error {
                 dcComplete = true
         }
 	// if nicknames specified, add to dcFlags
-        ParseNicknames(dcDatacenters.nicknamesList, domainName)
-
+        err = ParseNicknames(dcDatacenters.nicknamesList, domainName)
+	if err != nil {
+                if verboseStatus {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+                } else {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+                }
+        }
 	if !c.IsSet("datacenter") || len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)

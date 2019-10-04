@@ -71,8 +71,14 @@ func cmdUpdateProperty(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
-	ParseNicknames(pDatacenters.nicknamesList, domainName)
-
+        err = ParseNicknames(pDatacenters.nicknamesList, domainName)
+	if err != nil {
+                if verboseStatus {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+                } else {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+                }
+        }
 	if c.IsSet("server") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
 	}

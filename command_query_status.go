@@ -109,6 +109,45 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 
 }
 
+// Build DC property List
+func buildDCPropertyList(properties []*configgtm.Property, dcID int) []*reportsgtm.DCTData {
+
+	var dcPropList []*reportsgtm.DCTData
+	var dcProps []*reportsgtm.DCTDRow
+       	dcStat := &reportsgtm.DCTData{Timestamp: time.Now().Format(time.RFC3339)}
+       	for _, propPtr := range properties {
+                        trafficTargets := propPtr.TrafficTargets 
+                        for _, traffTarg := range trafficTargets {
+                                if traffTarg.DatacenterId == dcID {
+					dcTimedProp := &reportsgtm.DCTDRow{Name: propPtr.Name, Requests: 0, Status: "0"}
+                                        dcProps = append(dcProps, dcTimedProp)
+                                        break
+                                }
+                        }
+	}
+	dcStat.Properties = dcProps
+	dcPropList = append(dcPropList, dcStat)
+	return dcPropList
+}
+
+// Populate a list of empty DCStatusDetail structures
+func populateEmptyDCStatusList() ([]*DCStatusDetail, error) {
+
+	var dcStatDetailList []*DCStatusDetail
+	dom, err := configgtm.GetDomain(domainName)
+	if err != nil {
+		return dcStatDetailList, err
+	}
+	properties := dom.Properties
+	for _, dcID := range qsDatacenters.flagList {
+		dcEntry := &DCStatusDetail{DatacenterId: dcID} // Do we need the nickname also?
+		dcEntry.DCStatusByProperty = buildDCPropertyList(properties, dcID)
+		dcStatDetailList = append(dcStatDetailList, dcEntry)
+	}
+
+	return dcStatDetailList, nil
+}	
+
 // Retrieve Datacenter status for domain
 func gatherDatacenterStatus() (*DCTrafficStati, error) {
 
@@ -117,7 +156,11 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 	pstart, pend := calcPeriodStartandEnd("datacenter", statusPeriodLen)
         if pstart == isoStart || pend == isoEnd {
         	// default dates. return MT struct
-		return dcTrafficStati, nil
+		statByDC, err := populateEmptyDCStatusList()
+		dcTrafficStati.StatusByDatacenter = statByDC
+		dcTrafficStati.PeriodStart = time.Now().Format(time.RFC3339)
+		dcTrafficStati.PeriodEnd = time.Now().Format(time.RFC3339)
+		return dcTrafficStati, err
         }
 	dcTrafficStati.PeriodStart = pstart
 	dcTrafficStati.PeriodEnd = pend
@@ -132,6 +175,12 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 			return nil, err
 		}
 		dcEntry := &DCStatusDetail{DatacenterId: dcID, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval, DCStatusByProperty: dcTStatus.DataRows}
+		if dcTStatus.DataRows == nil || len(dcTStatus.DataRows) == 0 {
+			dom, err := configgtm.GetDomain(domainName)
+        		if err == nil {
+				dcEntry.DCStatusByProperty = buildDCPropertyList(dom.Properties, dcID)
+			}
+		} 
 		dcTrafficStati.StatusByDatacenter = append(dcTrafficStati.StatusByDatacenter, dcEntry)
 	}
 
@@ -279,7 +328,14 @@ func cmdQueryStatus(c *cli.Context) error {
 	if c.IsSet("property") && c.IsSet("datacenter") {
 		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
 	}
-	ParseNicknames(qsDatacenters.nicknamesList, domainName)
+	err = ParseNicknames(qsDatacenters.nicknamesList, domainName)
+        if err != nil {
+                if verboseStatus {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+                } else {
+                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+                }
+        }
 	akamai.StartSpinner(
 		"Querying status ...",
 		fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),
