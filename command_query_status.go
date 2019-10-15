@@ -488,7 +488,7 @@ func cmdQueryStatus(c *cli.Context) error {
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 
-		akamai.StopSpinnerOk()
+		akamai.StopSpinner("", true)
 
 	} else {
 		akamai.StopSpinnerOk()

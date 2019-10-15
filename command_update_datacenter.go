@@ -79,13 +79,18 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
 	}
 
+	if c.IsSet("json") {
+		akamai.StartSpinner("", "")
+	} else {
 	akamai.StartSpinner(
 		"Fetching data...",
-		fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")),
-	)
+		fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")),)
+	}
 
 	// get domain. Serves two purposes. Validates domain exists and retrieves all the properties
-	fmt.Println("Domain: ", domainName)
+        if !c.IsSet("json") {
+		fmt.Println("Domain: ", domainName)
+	}
 	dom, err := configgtm.GetDomain(domainName)
 
 	if err != nil {
@@ -95,13 +100,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	properties := dom.Properties
 	propmsg := fmt.Sprintf("%s contains %s properties", domainName, strconv.Itoa(len(properties)))
 	fmt.Sprintf(propmsg)
-	fmt.Println(propmsg)
+        if !c.IsSet("json") {
+		fmt.Println(propmsg)
+	}
 	for _, propPtr := range properties {
 		changes_made := false
-		fmt.Println(fmt.Sprintf("Property: %s", propPtr.Name))
+        	if !c.IsSet("json") {
+			fmt.Println(fmt.Sprintf("Property: %s", propPtr.Name))
+		}
 		trafficTargets := propPtr.TrafficTargets
 		targetsmsg := fmt.Sprintf("%s contains %s targets", propPtr.Name, strconv.Itoa(len(trafficTargets)))
-		fmt.Println(targetsmsg)
+	        if !c.IsSet("json") {
+			fmt.Println(targetsmsg)
+		}
 		fmt.Sprintf(targetsmsg)
 		for _, traffTarg := range trafficTargets {
 			dcs := dcDatacenters
@@ -137,8 +148,10 @@ func cmdUpdateDatacenter(c *cli.Context) error {
                 var sleepTimeout time.Duration = 1 // seconds. TODO: Should be configurable by user ...
                 sleepInterval *= time.Duration(defaultInterval)
                 sleepTimeout *= time.Duration(defaultTimeout)
-		fmt.Println(" ")
-		fmt.Printf("Waiting for completion .")
+	        if !c.IsSet("json") {
+			fmt.Println(" ")
+			fmt.Printf("Waiting for completion .")
+		}
                 for {
                         dStat, err := configgtm.GetDomainStatus(domainName)
 			if err != nil {
@@ -146,22 +159,30 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				fmt.Println("Unable to retrieve domain status.")
                                 break
                         }
-                	fmt.Printf(".")
-                        time.Sleep(sleepInterval * time.Second)
+		        if !c.IsSet("json") {
+                		fmt.Printf(".")
+                        }
+			time.Sleep(sleepInterval * time.Second)
                         sleepTimeout -= sleepInterval
                         if dStat.PropagationStatus == "COMPLETE" {
-				fmt.Println(" ")
-                                fmt.Println("Change deployed")
-                                break
+			        if !c.IsSet("json") {
+					fmt.Println(" ")
+                                	fmt.Println("Change deployed")
+                                }
+				break
                         } else if dStat.PropagationStatus == "DENIED" {
-				fmt.Println(" ")
-                                fmt.Println("Change denied")
-                                break
+			        if !c.IsSet("json") {
+					fmt.Println(" ")
+                                	fmt.Println("Change denied")
+                                }
+				break
                         }
                         if sleepTimeout <= 0 {
-                                fmt.Println(" ")
-                                fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
-                                break
+			        if !c.IsSet("json") {
+                        	        fmt.Println(" ")
+                                	fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+                                }
+				break
                         }
                 }
 	}
@@ -182,7 +203,12 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if updateSum.Failed_Updates == nil && updateSum.Updated_Properties == nil {
-		fmt.Fprintln(c.App.Writer, "No property updates were needed.")
+		if c.IsSet("json") {
+			akamai.StopSpinner("", true)
+		} else {
+			fmt.Fprintln(c.App.Writer, "No property updates were needed.")
+			akamai.StopSpinnerOk()
+		}
 	} else {
 		if c.IsSet("json") && c.Bool("json") {
 			json, err := json.MarshalIndent(updateSum, "", "  ")
@@ -191,13 +217,13 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
 			}
 			fmt.Fprintln(c.App.Writer, string(json))
+			akamai.StopSpinner("", true)
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			fmt.Fprintln(c.App.Writer, renderDCStatus(updateSum, c))
+			akamai.StopSpinnerOk()
 		}
 	}
-
-	akamai.StopSpinnerOk()
 
 	return nil
 
