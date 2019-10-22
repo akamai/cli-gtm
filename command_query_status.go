@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/reportsgtm-v1"
-        "github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
@@ -45,14 +45,14 @@ type DCTrafficStati struct {
 
 // Enhanced DCTData struct
 type EnhancedPropertyStatus struct {
-	Timestamp 	string	
-	Properties 	[]TimestampPropertyStatus
+	Timestamp  string
+	Properties []TimestampPropertyStatus
 }
 
 // Timestamp DC Prop Status
 type TimestampPropertyStatus struct {
 	reportsgtm.DCTDRow
-        Enabled bool
+	Enabled bool
 }
 
 // DCStatusDetail represents individual data center traffic status.
@@ -86,7 +86,7 @@ type PropertyDCStatus struct {
 	reportsgtm.IpStatPerPropDRow
 	DCTotalPeriodRequests int64
 	DCPropertyUsage       string
-	DCEnabled	      bool 
+	DCEnabled             bool
 }
 
 var defaultPeriod time.Duration = 15 * 60 * 1000 * 1000
@@ -108,9 +108,9 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 	} else {
 		// shouldn't get here. If so, return invalid date
 		err := &configgtm.CommonError{}
-                err.SetItem("entityName", "Window")
-                err.SetItem("name", "Data Window")
-                err.SetItem("apiErrorMessage", "Traffic Type "+trafficType+" not supported")
+		err.SetItem("entityName", "Window")
+		err.SetItem("name", "Data Window")
+		err.SetItem("apiErrorMessage", "Traffic Type "+trafficType+" not supported")
 	}
 	if err != nil {
 		// return invalid dates
@@ -124,25 +124,25 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 }
 
 type trafficTargetEnabledStatus struct {
-        ttDCID int
-        ttEnabled bool
+	ttDCID    int
+	ttEnabled bool
 }
 
-// Build DC Properties enabled list
-func buildDCPropertiesEnabledList(domain *configgtm.Domain, dcID int) map[string]trafficTargetEnabledStatus {
+// Build DC Properties enabled Map
+func buildDCPropertiesEnabledMap(domain *configgtm.Domain, dcID int) map[string]*trafficTargetEnabledStatus {
 
-	propEnabledMap := make(map[string]trafficTargetEnabledStatus)
+	propEnabledMap := make(map[string]*trafficTargetEnabledStatus)
 	for _, prop := range domain.Properties {
-        	for _, tgt := range prop.TrafficTargets {
-                	// collect enabled status
+		for _, tgt := range prop.TrafficTargets {
+			// collect enabled status
 			if tgt.DatacenterId == dcID {
-                		ttMapEntry := trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled}
-                		propEnabledMap[prop.Name] = ttMapEntry
+				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled}
+				propEnabledMap[prop.Name] = ttMapEntry
 			}
 		}
 	}
 	return propEnabledMap
-        
+
 }
 
 // Build DC property List
@@ -150,19 +150,19 @@ func buildDCPropertyList(domain *configgtm.Domain, dcID int) []EnhancedPropertyS
 
 	var dcPropList []EnhancedPropertyStatus
 	var dcProps []TimestampPropertyStatus
-       	dcStat := EnhancedPropertyStatus{Timestamp: time.Now().Format(time.RFC3339)}
-       	for _, propPtr := range domain.Properties {
-                        for _, traffTarg := range propPtr.TrafficTargets {
-                                if traffTarg.DatacenterId == dcID {
-					dcTimedProp := TimestampPropertyStatus{}
-					dcTimedProp.Name = propPtr.Name
-					dcTimedProp.Requests = 0 
-					dcTimedProp.Status = "0"
-					dcTimedProp.Enabled = traffTarg.Enabled
-                                        dcProps = append(dcProps, dcTimedProp)
-                                        break
-                                }
-                        }
+	dcStat := EnhancedPropertyStatus{Timestamp: time.Now().Format(time.RFC3339)}
+	for _, propPtr := range domain.Properties {
+		for _, traffTarg := range propPtr.TrafficTargets {
+			if traffTarg.DatacenterId == dcID {
+				dcTimedProp := TimestampPropertyStatus{}
+				dcTimedProp.Name = propPtr.Name
+				dcTimedProp.Requests = 0
+				dcTimedProp.Status = "0"
+				dcTimedProp.Enabled = traffTarg.Enabled
+				dcProps = append(dcProps, dcTimedProp)
+				break
+			}
+		}
 	}
 	dcStat.Properties = dcProps
 	dcPropList = append(dcPropList, dcStat)
@@ -198,7 +198,7 @@ func populateEmptyDCStatusList() ([]*DCStatusDetail, error) {
 	}
 
 	return dcStatDetailList, nil
-}	
+}
 
 // Retrieve Datacenter status for domain
 func gatherDatacenterStatus() (*DCTrafficStati, error) {
@@ -206,7 +206,12 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 	dcTrafficStati := &DCTrafficStati{Domain: domainName}
 	// calc period start and end
 	pstart, pend, err := calcPeriodStartandEnd("datacenter", statusPeriodLen)
-        if err != nil {
+	if err != nil {
+		return nil, err
+	}
+	// get the domain struct. Will need as cycle thru DCs
+	dom, err := configgtm.GetDomain(domainName)
+	if err != nil {
 		return nil, err
 	}
 	dcTrafficStati.PeriodStart = pstart
@@ -221,33 +226,44 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 			return nil, err
 		}
 		// Build DC Properties enabled list
-		dom, err := configgtm.GetDomain(domainName)
-                if err != nil {
-			return nil, err
-		}
-		enabledPropertiesList := buildDCPropertiesEnabledList(dom, dcID)
+		enabledPropertiesMap := buildDCPropertiesEnabledMap(dom, dcID)
 		dcEntry := &DCStatusDetail{DatacenterId: dcID, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval}
-		if (dcTStatus.DataRows == nil || len(dcTStatus.DataRows) < 1) {
+		if dcTStatus.DataRows == nil || len(dcTStatus.DataRows) < 1 {
 			dcEntry.DCStatusByProperty = buildDCPropertyList(dom, dcID)
 		} else {
 			// Need to poulate dc properties status structure by timestamp
-			enhPropList := make([]EnhancedPropertyStatus,0)
+			enhPropList := make([]EnhancedPropertyStatus, 0)
 			for _, dctData := range dcTStatus.DataRows {
+				// make map copy
+				enabledPropMapCopy := make(map[string]*trafficTargetEnabledStatus)
+				for i, d := range enabledPropertiesMap {
+					enabledPropMapCopy[i] = d
+				}
 				enhPropStat := EnhancedPropertyStatus{Timestamp: dctData.Timestamp}
-				propsList := make([]TimestampPropertyStatus,0)
+				propsList := make([]TimestampPropertyStatus, 0)
 				for _, props := range dctData.Properties {
 					propRowData := TimestampPropertyStatus{}
 					propRowData.Name = props.Name
 					propRowData.Requests = props.Requests
 					propRowData.Status = props.Status
-					if dcEnb, ok := enabledPropertiesList[props.Name]; ok {
+					if dcEnb, ok := enabledPropMapCopy[props.Name]; ok {
 						propRowData.Enabled = dcEnb.ttEnabled
-					} 
+					}
+					delete(enabledPropMapCopy, props.Name)
+					propsList = append(propsList, propRowData)
+				}
+				// Add in any missing Properties
+				for propName, eInfo := range enabledPropMapCopy {
+					propRowData := TimestampPropertyStatus{}
+					propRowData.Name = propName
+					propRowData.Requests = 0
+					propRowData.Status = "0"
+					propRowData.Enabled = eInfo.ttEnabled
 					propsList = append(propsList, propRowData)
 				}
 				enhPropStat.Properties = propsList
 				enhPropList = append(enhPropList, enhPropStat)
-				
+
 			}
 			dcEntry.DCStatusByProperty = enhPropList
 		}
@@ -261,9 +277,9 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 func getDomainStatus() (*configgtm.ResponseStatus, error) {
 
 	domStatus, err := configgtm.GetDomainStatus(domainName)
-        if err != nil {
-                return nil, err
-        }
+	if err != nil {
+		return nil, err
+	}
 
 	return domStatus, nil
 
@@ -285,7 +301,7 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-        var propertyTraffic *reportsgtm.PropertyTrafficResponse 
+	var propertyTraffic *reportsgtm.PropertyTrafficResponse
 	// Retrieve Property Traffic status
 	delete(optArgs, "mostRecent")
 	optArgs["start"] = pstart
@@ -296,8 +312,8 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	}
 	// Calc requests % per datacenter
 	type dcReqs struct {
-		reqs      int64
-		perc      float64
+		reqs int64
+		perc float64
 	}
 	var dcReqMap map[int]dcReqs
 	var propertyTotalReqs int64
@@ -316,41 +332,41 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	// find any missing datacenters. as aside,build map of targets capturing name and enabled flag.
 	var disabledDCPeriodList []*reportsgtm.PropertyDRow
 	type trafficTargetEnabledStatus struct {
-		ttName string
+		ttName     string
 		ttNickname string
-		ttEnabled bool
+		ttEnabled  bool
 	}
-	ttEnabledMap :=  make(map[int]trafficTargetEnabledStatus)
+	ttEnabledMap := make(map[int]trafficTargetEnabledStatus)
 	prop, err := configgtm.GetProperty(qsProperty, domainName)
 	// if error, can't find disabled targets ... results in incomplete set
 	if err != nil {
 		return nil, err
 	}
 	for _, tgt := range prop.TrafficTargets {
-                // collect enabled status for later use
-                ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled}
-                // need info from DC, e.g. nickname
-                dc, err := configgtm.GetDatacenter(tgt.DatacenterId, domainName)
-                if err == nil {
-                        ttMapEntry.ttNickname = dc.Nickname
-                }
-                ttEnabledMap[tgt.DatacenterId] = ttMapEntry
+		// collect enabled status for later use
+		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled}
+		// need info from DC, e.g. nickname
+		dc, err := configgtm.GetDatacenter(tgt.DatacenterId, domainName)
+		if err == nil {
+			ttMapEntry.ttNickname = dc.Nickname
+		}
+		ttEnabledMap[tgt.DatacenterId] = ttMapEntry
 		if _, ok := dcReqMap[tgt.DatacenterId]; !ok {
 			// not in map so not in returned results ...
-			//create and populate 
-			disabledDCP := &reportsgtm.PropertyDRow{DatacenterId: tgt.DatacenterId, TrafficTargetName: tgt.Name, Requests: 0} 
+			//create and populate
+			disabledDCP := &reportsgtm.PropertyDRow{DatacenterId: tgt.DatacenterId, TrafficTargetName: tgt.Name, Requests: 0}
 			disabledDCP.Status = "0" // if wasn't reported on, likely not responding to requests
 			// collect enabled status for later use
 			disabledDCP.Nickname = ttMapEntry.ttNickname
 			disabledDCPeriodList = append(disabledDCPeriodList, disabledDCP)
 			// add an entry to dcReqMap
-			dcReqMap[tgt.DatacenterId] = dcReqs{reqs:0, perc:0.0}
-		} 
+			dcReqMap[tgt.DatacenterId] = dcReqs{reqs: 0, perc: 0.0}
+		}
 	}
 	// append to datarow dc lists
 	for _, drEntry := range propertyTraffic.DataRows {
 		drEntry.Datacenters = append(drEntry.Datacenters, disabledDCPeriodList...)
-	} 	
+	}
 	// Calculate percentage for WHOLE period
 	for k, dcRow := range dcReqMap {
 		if propertyTotalReqs > 0 {
@@ -390,19 +406,19 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 				propertyDCStatus.DCEnabled = ttEnabledMap[dc.DatacenterId].ttEnabled
 				propertyDCStatusArray = append(propertyDCStatusArray, propertyDCStatus)
 				// remove entry from map ...
-				delete(ttEnabledMap, dc.DatacenterId)	
+				delete(ttEnabledMap, dc.DatacenterId)
 			}
 		}
 	}
 	// Add in disabled DCs
 	var disabledDCSumList []*PropertyDCStatus
 	for dcId, eMap := range ttEnabledMap {
-                disabledDCSum := &PropertyDCStatus{}
-                disabledDCSum.DatacenterId = dcId
-                disabledDCSum.TrafficTargetName = eMap.ttName
-		disabledDCSum.DCEnabled = eMap.ttEnabled 
-                disabledDCSum.Nickname = eMap.ttNickname
-                disabledDCSum.DCPropertyUsage = "0.00%"
+		disabledDCSum := &PropertyDCStatus{}
+		disabledDCSum.DatacenterId = dcId
+		disabledDCSum.TrafficTargetName = eMap.ttName
+		disabledDCSum.DCEnabled = eMap.ttEnabled
+		disabledDCSum.Nickname = eMap.ttNickname
+		disabledDCSum.DCPropertyUsage = "0.00%"
 		disabledDCSum.IPs = make([]*reportsgtm.IpStatIp, 0)
 		disabledDCSumList = append(disabledDCSumList, disabledDCSum)
 	}
@@ -423,7 +439,7 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 
 	reportsgtm.Init(config)
-        configgtm.Init(config)
+	configgtm.Init(config)
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
@@ -434,7 +450,7 @@ func cmdQueryStatus(c *cli.Context) error {
 
 	qsProperty = c.String("property")
 	qsDatacenters = (c.Generic("datacenter")).(*arrayFlags)
-        if c.IsSet("verbose") {
+	if c.IsSet("verbose") {
 		verboseStatus = true
 	}
 
@@ -442,16 +458,16 @@ func cmdQueryStatus(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
 	}
 	err = ParseNicknames(qsDatacenters.nicknamesList, domainName)
-        if err != nil {
-                if verboseStatus {
-                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
-                } else {
-                        return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
-                }
-        }
+	if err != nil {
+		if verboseStatus {
+			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+		} else {
+			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+		}
+	}
 	if c.IsSet("json") {
 		akamai.StartSpinner("", "")
-		} else {
+	} else {
 		akamai.StartSpinner(
 			"Querying status ...",
 			fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),
@@ -461,24 +477,30 @@ func cmdQueryStatus(c *cli.Context) error {
 	var objStatus interface{}
 
 	if c.IsSet("datacenter") {
-		if !c.IsSet("json") { fmt.Println("... Collecting DC status") }
+		if !c.IsSet("json") {
+			fmt.Println("... Collecting DC status")
+		}
 		objStatus, err = gatherDatacenterStatus()
 	} else if c.IsSet("property") {
-		if !c.IsSet("json") { fmt.Println("... Collecting Property status") }
+		if !c.IsSet("json") {
+			fmt.Println("... Collecting Property status")
+		}
 		objStatus, err = gatherPropertyStatus()
 	} else {
-                if !c.IsSet("json") { fmt.Println("... Collecting Domain status") }
+		if !c.IsSet("json") {
+			fmt.Println("... Collecting Domain status")
+		}
 		objStatus, err = getDomainStatus()
 	}
-        // check for failure
-        if err != nil {
-                akamai.StopSpinnerFail()
-                if verboseStatus {
-                        return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
-                } else {
-                        return cli.NewExitError(color.RedString("Unable to retrieve status."), 1)
-                }       
-        }      
+	// check for failure
+	if err != nil {
+		akamai.StopSpinnerFail()
+		if verboseStatus {
+			return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
+		} else {
+			return cli.NewExitError(color.RedString("Unable to retrieve status."), 1)
+		}
+	}
 
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
@@ -488,7 +510,7 @@ func cmdQueryStatus(c *cli.Context) error {
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 
-		akamai.StopSpinner("", true)
+		akamai.StopSpinner("", false)
 
 	} else {
 		akamai.StopSpinnerOk()
@@ -504,7 +526,7 @@ func cmdQueryStatus(c *cli.Context) error {
 
 		} else {
 			fmt.Fprintln(c.App.Writer, renderDomainTable(objStatus.(*configgtm.ResponseStatus), c))
-                }
+		}
 	}
 
 	return nil
@@ -615,7 +637,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 			dcenabled = strconv.FormatBool(dc.DCEnabled)
 			dcptr = strconv.FormatInt(dc.DCTotalPeriodRequests, 10)
 			if len(dc.IPs) < 1 {
-				dc.IPs = []*reportsgtm.IpStatIp{&reportsgtm.IpStatIp{}} 
+				dc.IPs = []*reportsgtm.IpStatIp{&reportsgtm.IpStatIp{}}
 			}
 			for k, ip := range dc.IPs {
 				if k == 0 {
@@ -690,39 +712,38 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 // Pretty print output
 func renderDomainTable(status *configgtm.ResponseStatus, c *cli.Context) string {
 
-        var outString string
-        outString += fmt.Sprintln(" ")
-        outString += fmt.Sprintln(fmt.Sprintf("Domain: %s", domainName))
-        outString += fmt.Sprintln("Current Status")
-        outString += fmt.Sprintln(" ")
-        tableString := &strings.Builder{}
-        table := tablewriter.NewWriter(tableString)
+	var outString string
+	outString += fmt.Sprintln(" ")
+	outString += fmt.Sprintln(fmt.Sprintf("Domain: %s", domainName))
+	outString += fmt.Sprintln("Current Status")
+	outString += fmt.Sprintln(" ")
+	tableString := &strings.Builder{}
+	table := tablewriter.NewWriter(tableString)
 
-        table.SetReflowDuringAutoWrap(false)
-        table.SetCenterSeparator(" ")
-        table.SetColumnSeparator(" ")
-        table.SetRowSeparator(" ")
-        table.SetBorder(false)
-        table.SetAutoWrapText(false)
-        table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
-        table.SetAlignment(tablewriter.ALIGN_CENTER)
+	table.SetReflowDuringAutoWrap(false)
+	table.SetCenterSeparator(" ")
+	table.SetColumnSeparator(" ")
+	table.SetRowSeparator(" ")
+	table.SetBorder(false)
+	table.SetAutoWrapText(false)
+	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
-        // Build status table. Exclude Links.
-        rowData := []string{"ChangeId", status.ChangeId}
-        table.Append(rowData)
-        rowData = []string{"Message", status.Message}
-        table.Append(rowData)
-        rowData = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
-        table.Append(rowData)
-        rowData = []string{"Propagation Status", status.PropagationStatus}
-        table.Append(rowData)
-        rowData = []string{"Propagation Status Date", status.PropagationStatusDate}
-        table.Append(rowData)
+	// Build status table. Exclude Links.
+	rowData := []string{"ChangeId", status.ChangeId}
+	table.Append(rowData)
+	rowData = []string{"Message", status.Message}
+	table.Append(rowData)
+	rowData = []string{"Passing Validation", strconv.FormatBool(status.PassingValidation)}
+	table.Append(rowData)
+	rowData = []string{"Propagation Status", status.PropagationStatus}
+	table.Append(rowData)
+	rowData = []string{"Propagation Status Date", status.PropagationStatusDate}
+	table.Append(rowData)
 
-        table.Render()
-        outString += fmt.Sprintln(tableString.String())
+	table.Render()
+	outString += fmt.Sprintln(tableString.String())
 
-        return outString
+	return outString
 
 }
-
