@@ -107,7 +107,7 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 		window, err = reportsgtm.GetPropertiesTrafficWindow()
 	} else {
 		// shouldn't get here. If so, return invalid date
-		err := &configgtm.CommonError{}
+		err := configgtm.CommonError{}
 		err.SetItem("entityName", "Window")
 		err.SetItem("name", "Data Window")
 		err.SetItem("apiErrorMessage", "Traffic Type "+trafficType+" not supported")
