@@ -37,7 +37,7 @@ type FailUpdate struct {
 	FailMsg  string
 }
 
-// UpdateSummary is the result summary status structure 
+// UpdateSummary is the result summary status structure
 type UpdateSummary struct {
 	Updated_Properties interface{}
 	Failed_Updates     []*FailUpdate
