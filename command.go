@@ -15,17 +15,17 @@
 package main
 
 import (
-	"strconv"
-	"strings"
 	"errors"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/urfave/cli"
+	"strconv"
+	"strings"
 )
 
 type arrayFlags struct {
 	flagList       []int
 	flagStringList []string
-        nicknamesList   []string
+	nicknamesList  []string
 }
 
 var dcFlags arrayFlags
@@ -56,10 +56,10 @@ func (i *arrayFlags) Set(value string) error {
 			return nil
 		}
 	}
-        // See if its an id vs nickname
+	// See if its an id vs nickname
 	intVal, err := strconv.Atoi(value)
 	if err != nil {
-                // nickname. save for later processing (need domain to map)
+		// nickname. save for later processing (need domain to map)
 		i.nicknamesList = append(i.nicknamesList, value)
 		return nil
 	}
@@ -74,7 +74,7 @@ func parseBoolString(val string) (bool, error) {
 	if boolVal == "true" {
 		return true, nil
 	} else if boolVal == "false" {
-		return false, nil 
+		return false, nil
 	}
 	return true, errors.New("Invalid value provided. Acceptable values: true, false")
 }
@@ -97,10 +97,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "enable",
 				Usage: "Enable specified datacenter(s).",
 			},
-                        cli.BoolFlag{
-                                Name:  "disable",
-                                Usage: "Disable specified datacenter(s).",
-                        },
+			cli.BoolFlag{
+				Name:  "disable",
+				Usage: "Disable specified datacenter(s).",
+			},
 			cli.BoolFlag{
 				Name:  "verbose",
 				Usage: "Display verbose result status.",
@@ -109,10 +109,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "json",
 				Usage: "Return status in JSON format.",
 			},
-                        cli.BoolFlag{
-                                Name:  "complete",
-                                Usage: "Wait up to 5 minutes for change completion.",
-                        },
+			cli.BoolFlag{
+				Name:  "complete",
+				Usage: "Wait up to 5 minutes for change completion.",
+			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})
@@ -123,18 +123,18 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		ArgsUsage:   "[domain, property]",
 		Action:      cmdUpdateProperty,
 		Flags: []cli.Flag{
-                        cli.GenericFlag{
-                                Name:  "datacenter",
-                                Usage: "Apply change to specified datacenter by id or nickname.",
-                                Value: &dcFlags,
-                        },
-                        cli.BoolTFlag{
-                                Name:  "enable",
-                                Usage: "Enable specified datacenter(s).",
-                        },
-                        cli.BoolFlag{
-                                Name:  "disable",
-                                Usage: "Disable specified datacenter(s).",
+			cli.GenericFlag{
+				Name:  "datacenter",
+				Usage: "Apply change to specified datacenter by id or nickname.",
+				Value: &dcFlags,
+			},
+			cli.BoolTFlag{
+				Name:  "enable",
+				Usage: "Enable specified datacenter(s).",
+			},
+			cli.BoolFlag{
+				Name:  "disable",
+				Usage: "Disable specified datacenter(s).",
 			},
 			cli.Float64Flag{
 				Name:  "weight",
@@ -152,10 +152,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "json",
 				Usage: "Return status in JSON format.",
 			},
-                        cli.BoolFlag{
-                                Name:  "complete",
-                                Usage: "Wait up to 5 minutes for change completion",
-                        },
+			cli.BoolFlag{
+				Name:  "complete",
+				Usage: "Wait up to 5 minutes for change completion",
+			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
 	})

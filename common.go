@@ -37,7 +37,7 @@ type FailUpdate struct {
 	FailMsg  string
 }
 
-// UpdateSummary is the result summary status structure 
+// UpdateSummary is the result summary status structure
 type UpdateSummary struct {
 	Updated_Properties interface{}
 	Failed_Updates     []*FailUpdate
@@ -46,17 +46,22 @@ type UpdateSummary struct {
 var verboseStatus bool = false
 
 // ParseNicknames parses any nicknames provided and adds to dcFlags
-func ParseNicknames(nicknames []string, domain string) {
+func ParseNicknames(nicknames []string, domain string) error {
 
-	// get list of data centers
-	dcList, _ := configgtm.ListDatacenters(domain)
-	// walk thru datacenters and nicknames
-	for _, dc := range dcList {
-		for _, nn := range nicknames {
-			if dc.Nickname == nn {
-				dcFlags.Set(strconv.Itoa(dc.DatacenterId))
+	if len(nicknames) > 0 {
+		// get list of data centers
+		dcList, err := configgtm.ListDatacenters(domain)
+		if err != nil {
+			return err
+		}
+		// walk thru datacenters and nicknames
+		for _, dc := range dcList {
+			for _, nn := range nicknames {
+				if dc.Nickname == nn {
+					dcFlags.Set(strconv.Itoa(dc.DatacenterId))
+				}
 			}
 		}
 	}
-
+	return nil
 }

@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
 	akamai "github.com/akamai/cli-common-golang"
-	"strconv"
-	"strings"
-	"time"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var dcEnabled bool = true
@@ -52,34 +52,45 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 
 	domainName := c.Args().First()
 	dcDatacenters = c.Generic("datacenter").(*arrayFlags)
-        if c.IsSet("enable") && c.IsSet("disable") {
-                return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
-        } else if c.IsSet("enable") {
-                dcEnabled = true
-        } else if c.IsSet("disable") {
-                dcEnabled = false
-        }
-        if c.IsSet("verbose") {
-                verboseStatus = true
-        }
-        if c.IsSet("complete") {
-                dcComplete = true
-        }
+	if c.IsSet("enable") && c.IsSet("disable") {
+		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+	} else if c.IsSet("enable") {
+		dcEnabled = true
+	} else if c.IsSet("disable") {
+		dcEnabled = false
+	}
+	if c.IsSet("verbose") {
+		verboseStatus = true
+	}
+	if c.IsSet("complete") {
+		dcComplete = true
+	}
 	// if nicknames specified, add to dcFlags
-        ParseNicknames(dcDatacenters.nicknamesList, domainName)
-
+	err = ParseNicknames(dcDatacenters.nicknamesList, domainName)
+	if err != nil {
+		if verboseStatus {
+			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+		} else {
+			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+		}
+	}
 	if !c.IsSet("datacenter") || len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
 	}
 
-	akamai.StartSpinner(
-		"Fetching data...",
-		fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")),
-	)
+	if c.IsSet("json") {
+		akamai.StartSpinner("", "")
+	} else {
+		akamai.StartSpinner(
+			"Fetching data...",
+			fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")))
+	}
 
 	// get domain. Serves two purposes. Validates domain exists and retrieves all the properties
-	fmt.Println("Domain: ", domainName)
+	if !c.IsSet("json") {
+		fmt.Println("Domain: ", domainName)
+	}
 	dom, err := configgtm.GetDomain(domainName)
 
 	if err != nil {
@@ -89,13 +100,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	properties := dom.Properties
 	propmsg := fmt.Sprintf("%s contains %s properties", domainName, strconv.Itoa(len(properties)))
 	fmt.Sprintf(propmsg)
-	fmt.Println(propmsg)
+	if !c.IsSet("json") {
+		fmt.Println(propmsg)
+	}
 	for _, propPtr := range properties {
 		changes_made := false
-		fmt.Println(fmt.Sprintf("Property: %s", propPtr.Name))
+		if !c.IsSet("json") {
+			fmt.Println(fmt.Sprintf("Property: %s", propPtr.Name))
+		}
 		trafficTargets := propPtr.TrafficTargets
 		targetsmsg := fmt.Sprintf("%s contains %s targets", propPtr.Name, strconv.Itoa(len(trafficTargets)))
-		fmt.Println(targetsmsg)
+		if !c.IsSet("json") {
+			fmt.Println(targetsmsg)
+		}
 		fmt.Sprintf(targetsmsg)
 		for _, traffTarg := range trafficTargets {
 			dcs := dcDatacenters
@@ -125,39 +142,49 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if dcComplete && (len(succVerboseArray) > 0 || len(succShortArray) > 0) {
-                var defaultInterval int = 5
-                var defaultTimeout int = 300
-                var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
-                var sleepTimeout time.Duration = 1 // seconds. TODO: Should be configurable by user ...
-                sleepInterval *= time.Duration(defaultInterval)
-                sleepTimeout *= time.Duration(defaultTimeout)
-		fmt.Println(" ")
-		fmt.Printf("Waiting for completion .")
-                for {
-                        dStat, err := configgtm.GetDomainStatus(domainName)
+		var defaultInterval int = 5
+		var defaultTimeout int = 300
+		var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
+		var sleepTimeout time.Duration = 1  // seconds. TODO: Should be configurable by user ...
+		sleepInterval *= time.Duration(defaultInterval)
+		sleepTimeout *= time.Duration(defaultTimeout)
+		if !c.IsSet("json") {
+			fmt.Println(" ")
+			fmt.Printf("Waiting for completion .")
+		}
+		for {
+			dStat, err := configgtm.GetDomainStatus(domainName)
 			if err != nil {
 				fmt.Println(" ")
 				fmt.Println("Unable to retrieve domain status.")
-                                break
-                        }
-                	fmt.Printf(".")
-                        time.Sleep(sleepInterval * time.Second)
-                        sleepTimeout -= sleepInterval
-                        if dStat.PropagationStatus == "COMPLETE" {
-				fmt.Println(" ")
-                                fmt.Println("Change deployed")
-                                break
-                        } else if dStat.PropagationStatus == "DENIED" {
-				fmt.Println(" ")
-                                fmt.Println("Change denied")
-                                break
-                        }
-                        if sleepTimeout <= 0 {
-                                fmt.Println(" ")
-                                fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
-                                break
-                        }
-                }
+				break
+			}
+			if !c.IsSet("json") {
+				fmt.Printf(".")
+			}
+			time.Sleep(sleepInterval * time.Second)
+			sleepTimeout -= sleepInterval
+			if dStat.PropagationStatus == "COMPLETE" {
+				if !c.IsSet("json") {
+					fmt.Println(" ")
+					fmt.Println("Change deployed")
+				}
+				break
+			} else if dStat.PropagationStatus == "DENIED" {
+				if !c.IsSet("json") {
+					fmt.Println(" ")
+					fmt.Println("Change denied")
+				}
+				break
+			}
+			if sleepTimeout <= 0 {
+				if !c.IsSet("json") {
+					fmt.Println(" ")
+					fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+				}
+				break
+			}
+		}
 	}
 
 	if len(properties) == 1 && len(failedArray) > 0 {
@@ -176,7 +203,12 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if updateSum.Failed_Updates == nil && updateSum.Updated_Properties == nil {
-		fmt.Fprintln(c.App.Writer, "No property updates were needed.")
+		if c.IsSet("json") {
+			akamai.StopSpinner("", false)
+		} else {
+			fmt.Fprintln(c.App.Writer, "No property updates were needed.")
+			akamai.StopSpinnerOk()
+		}
 	} else {
 		if c.IsSet("json") && c.Bool("json") {
 			json, err := json.MarshalIndent(updateSum, "", "  ")
@@ -185,13 +217,13 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
 			}
 			fmt.Fprintln(c.App.Writer, string(json))
+			akamai.StopSpinner("", false)
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			fmt.Fprintln(c.App.Writer, renderDCStatus(updateSum, c))
+			akamai.StopSpinnerOk()
 		}
 	}
-
-	akamai.StopSpinnerOk()
 
 	return nil
 

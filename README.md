@@ -58,7 +58,7 @@ Built-In Commands:
 To enable one or more datacenters:
 
 ```
-$ akamai gtm update-datacenter example.akadns.net --datacenter 3131 --datacenter 3132 --enabled
+$ akamai gtm update-datacenter example.akadns.net --datacenter 3131 --datacenter 3132 --enable
 ```
 
 ### Update datacenters in property
@@ -66,7 +66,7 @@ $ akamai gtm update-datacenter example.akadns.net --datacenter 3131 --datacenter
 To enable datacenters in a property:
 
 ```
-$ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --disabled
+$ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --disable
 ```
 
 To modify a datacenter's weight:                                    
@@ -83,7 +83,7 @@ $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 -
 
 ### Query Status 
 
-Query a dayacenter's status:
+Query a datacenter's status:
 
 ```
 $ akamai gtm query-status example.akadns.net --datacenter 3132

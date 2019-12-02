@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:11d88cefcc630b1fe7177079f65e9ab2e5d6e5561c43ef742f05ea6761e9a9fa"
+  digest = "1:cb95f9716fe1d0b7adf150c5f6e7185d32e0b730ffbb38e118e3674803de4280"
   name = "github.com/akamai/AkamaiOPEN-edgegrid-golang"
   packages = [
     "client-v1",
@@ -12,8 +12,8 @@
     "reportsgtm-v1",
   ]
   pruneopts = "UT"
-  revision = "f85d9fba0c117ecabe725f3bf31a45ddfb182d85"
-  version = "v0.9.0"
+  revision = "92c9549843bc6117cfbfb27755344c9551628819"
+  version = "v0.9.3"
 
 [[projects]]
   branch = "master"
@@ -24,20 +24,20 @@
   revision = "ff6f30c42c8085fd68075856b429649d4a711f40"
 
 [[projects]]
-  digest = "1:937ce6e0cd5ccfec205f444a0d9c74f5680cbb68cd0a992b000559bf964ea20b"
+  digest = "1:09905b6d07a3870de03c9929b8dc57934168d53360258620425d7cd09a8a1177"
   name = "github.com/briandowns/spinner"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e3fb08e7443c496a847cb2eef48e3883f3e12c38"
-  version = "v1.6.1"
+  revision = "3c8853093b003d55bda54c96b8f82e321147d193"
+  version = "v1.8.0"
 
 [[projects]]
-  digest = "1:8784c47d568840fb6bf310981860b3c2ac6cfa61a9b686f10d228a8d84118261"
-  name = "github.com/edglynes/AkamaiOPEN-edgegrid-golang"
-  packages = ["client-v1"]
+  digest = "1:7cb4fdca4c251b3ef8027c90ea35f70c7b661a593b9eeae34753c65499098bb1"
+  name = "github.com/cpuguy83/go-md2man"
+  packages = ["md2man"]
   pruneopts = "UT"
-  revision = "009960c8b2c7c57a0c5c488a3c8c778c16f3f586"
-  version = "v0.7.4"
+  revision = "7762f7e404f8416dfa1d9bb6a8c192aa9acb4d19"
+  version = "v1.0.10"
 
 [[projects]]
   digest = "1:865079840386857c809b72ce300be7580cb50d3d3129ce11bf9aa6ca2bc1934a"
@@ -48,12 +48,12 @@
   version = "v1.7.0"
 
 [[projects]]
-  digest = "1:6c56c50b13fd3cb33b692b264727c1c89198274f5dcabaa077e3b2472037e0f9"
+  digest = "1:591460fbfc463bda7071ac906bed19cbf64cffd5fcb80a6d1490e87b9dfad942"
   name = "github.com/go-ini/ini"
   packages = ["."]
   pruneopts = "UT"
-  revision = "d4cae42d398bc0095297fc3315669590d29166ea"
-  version = "v1.46.0"
+  revision = "87e589f4917038ae250cff2446db7573f47e97ca"
+  version = "v1.51.0"
 
 [[projects]]
   digest = "1:582b704bebaa06b48c29b0cec224a6058a09c86883aaddabde889cd1a5f73e1b"
@@ -80,20 +80,20 @@
   version = "v0.0.9"
 
 [[projects]]
-  digest = "1:9b90c7639a41697f3d4ad12d7d67dfacc9a7a4a6e0bbfae4fc72d0da57c28871"
+  digest = "1:d62282425ffb75047679d7e2c3b980eea7f82c05ef5fb9142ee617ebac6e7432"
   name = "github.com/mattn/go-isatty"
   packages = ["."]
   pruneopts = "UT"
-  revision = "1311e847b0cb909da63b5fecfb5370aa66236465"
-  version = "v0.0.8"
+  revision = "88ba11cfdc67c7588b30042edf244b2875f892b6"
+  version = "v0.0.10"
 
 [[projects]]
-  digest = "1:0356f3312c9bd1cbeda81505b7fd437501d8e778ab66998ef69f00d7f9b3a0d7"
+  digest = "1:8b9352f5af622f234923139000732eb2fb32574949fa84d60a21c70e5dd7d3e6"
   name = "github.com/mattn/go-runewidth"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3ee7d812e62a0804a7d0a324e0249ca2db3476d3"
-  version = "v0.0.4"
+  revision = "f93a0d58d5fd95e53f82782d07bb0c79d23e1290"
+  version = "v0.0.6"
 
 [[projects]]
   digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
@@ -104,12 +104,28 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:abcdbf03ca6ca13d3697e2186edc1f33863bbdac2b3a44dfa39015e8903f7409"
+  digest = "1:94ac61005d8a6d448d3dfbfa6bcc1bffe4c36b26bd5e8ba714c21bb241c1c9b8"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e6d60cf7ba1f42d86d54cdf5508611c4aafb3970"
-  version = "v0.0.1"
+  revision = "1ab4b831fd5f2aad691b6870d22fff83e43e6343"
+  version = "v0.0.3"
+
+[[projects]]
+  digest = "1:2ee0f15eb0fb04f918db7c2dcf39745f40d69f798ef171610a730e8a56aaa4fd"
+  name = "github.com/russross/blackfriday"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "d3b5b032dc8e8927d31a5071b56e14c89f045135"
+  version = "v2.0.1"
+
+[[projects]]
+  digest = "1:9421f6e9e28ef86933e824b5caff441366f2b69bb281085b9dca40e1f27a1602"
+  name = "github.com/shurcooL/sanitized_anchor_name"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "7bfe4c7ecddb3666a94b053b422cdd8f5aaa3615"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:04457f9f6f3ffc5fea48e71d62f2ca256637dee0a04d710288e27e05c8b41976"
@@ -120,12 +136,12 @@
   version = "v1.4.2"
 
 [[projects]]
-  digest = "1:ca4df663ad76879ad38dbd736493679cbb1aa596c6d479fd9fc5e959e5ceb4fb"
+  digest = "1:1d3ef3dd057d2eb1819e945f88cc83835296c9b7fb13ad3194c937c4e2891fee"
   name = "github.com/urfave/cli"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e6cf83ec39f6e1158ced1927d4ed14578fda8edb"
-  version = "v1.21.0"
+  revision = "bfe2e925cfb6d44b40ad3a779165ea7e8aff9212"
+  version = "v1.22.0"
 
 [[projects]]
   branch = "release-branch.go1.11"
