@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:cb95f9716fe1d0b7adf150c5f6e7185d32e0b730ffbb38e118e3674803de4280"
+  digest = "1:0a473687c65d3a335417f764502eaffd49b514e6bd0c0518cc5feded8480b677"
   name = "github.com/akamai/AkamaiOPEN-edgegrid-golang"
   packages = [
     "client-v1",
@@ -12,8 +12,8 @@
     "reportsgtm-v1",
   ]
   pruneopts = "UT"
-  revision = "92c9549843bc6117cfbfb27755344c9551628819"
-  version = "v0.9.3"
+  revision = "8db108f65ecf12be6e58aad0c43a5af9ba470462"
+  version = "v0.9.13"
 
 [[projects]]
   branch = "master"
@@ -24,12 +24,12 @@
   revision = "ff6f30c42c8085fd68075856b429649d4a711f40"
 
 [[projects]]
-  digest = "1:09905b6d07a3870de03c9929b8dc57934168d53360258620425d7cd09a8a1177"
+  digest = "1:fcaca5124d5b6dad129e2bc7efa9632634759a8ec35ccde13007553062d57851"
   name = "github.com/briandowns/spinner"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3c8853093b003d55bda54c96b8f82e321147d193"
-  version = "v1.8.0"
+  revision = "2123868a37481aa4ccf78e5485b0c83df6cc1a6c"
+  version = "v1.11.1"
 
 [[projects]]
   digest = "1:7cb4fdca4c251b3ef8027c90ea35f70c7b661a593b9eeae34753c65499098bb1"
@@ -46,14 +46,6 @@
   pruneopts = "UT"
   revision = "5b77d2a35fb0ede96d138fc9a99f5c9b6aef11b4"
   version = "v1.7.0"
-
-[[projects]]
-  digest = "1:591460fbfc463bda7071ac906bed19cbf64cffd5fcb80a6d1490e87b9dfad942"
-  name = "github.com/go-ini/ini"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "87e589f4917038ae250cff2446db7573f47e97ca"
-  version = "v1.51.0"
 
 [[projects]]
   digest = "1:582b704bebaa06b48c29b0cec224a6058a09c86883aaddabde889cd1a5f73e1b"
@@ -112,6 +104,14 @@
   version = "v0.0.3"
 
 [[projects]]
+  digest = "1:808cdddf087fb64baeae67b8dfaee2069034d9704923a3cb8bd96a995421a625"
+  name = "github.com/patrickmn/go-cache"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0"
+  version = "v2.1.0"
+
+[[projects]]
   digest = "1:b36a0ede02c4c2aef7df7f91cbbb7bb88a98b5d253509d4f997dda526e50c88c"
   name = "github.com/russross/blackfriday"
   packages = ["."]
@@ -142,6 +142,14 @@
   packages = ["unix"]
   pruneopts = "UT"
   revision = "98c5dad5d1a0e8a73845ecc8897d0bd56586511d"
+
+[[projects]]
+  digest = "1:a064971c78455f088b48483cf48a61dbe2f173dc02043cf76a06e19acba3c5e4"
+  name = "gopkg.in/ini.v1"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "39bc4ddcb8b9d0100f7a040816380ccda878b94a"
+  version = "v1.55.0"
 
 [solve-meta]
   analyzer-name = "dep"

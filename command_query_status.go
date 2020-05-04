@@ -465,30 +465,25 @@ func cmdQueryStatus(c *cli.Context) error {
 			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
 		}
 	}
-	if c.IsSet("json") {
-		akamai.StartSpinner("", "")
-	} else {
-		akamai.StartSpinner(
-			"Querying status ...",
-			fmt.Sprintf("Fetching status ...... [%s]", color.GreenString("OK")),
-		)
+	if !c.IsSet("json") {
+		fmt.Println("Querying status")
 	}
 
 	var objStatus interface{}
 
 	if c.IsSet("datacenter") {
 		if !c.IsSet("json") {
-			fmt.Println("... Collecting DC status")
+			akamai.StartSpinner("Collecting DC status ", "")
 		}
 		objStatus, err = gatherDatacenterStatus()
 	} else if c.IsSet("property") {
 		if !c.IsSet("json") {
-			fmt.Println("... Collecting Property status")
+			akamai.StartSpinner("Collecting Property status ", "")
 		}
 		objStatus, err = gatherPropertyStatus()
 	} else {
 		if !c.IsSet("json") {
-			fmt.Println("... Collecting Domain status")
+			akamai.StartSpinner("Collecting Domain status ", "")
 		}
 		objStatus, err = getDomainStatus()
 	}
@@ -505,13 +500,9 @@ func cmdQueryStatus(c *cli.Context) error {
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
 		if err != nil {
-			akamai.StopSpinnerFail()
 			return cli.NewExitError(color.RedString("Unable to display status results"), 1)
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
-
-		akamai.StopSpinner("", false)
-
 	} else {
 		akamai.StopSpinnerOk()
 

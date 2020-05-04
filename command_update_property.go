@@ -86,29 +86,22 @@ func cmdUpdateProperty(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
 	}
 	if c.IsSet("json") {
-		akamai.StartSpinner("", "")
-	} else {
-		akamai.StartSpinner(
-			"Updating property ...",
-			fmt.Sprintf("Fetching "+propertyName+" ...... [%s]", color.GreenString("OK")))
+		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
 	}
 
 	property, err := configgtm.GetProperty(propertyName, domainName)
 	if err != nil {
-		akamai.StopSpinnerFail()
 		return cli.NewExitError(color.RedString("Property not found"), 1)
 	}
 
 	changes_made := false
-	if !c.IsSet("json") {
-		fmt.Println(fmt.Sprintf("Property: %s", property.Name))
-	}
 	trafficTargets := property.TrafficTargets
 	targetsmsg := fmt.Sprintf("%s contains %s targets", property.Name, strconv.Itoa(len(trafficTargets)))
 	if !c.IsSet("json") {
 		fmt.Println(targetsmsg)
 	}
 	fmt.Sprintf(targetsmsg)
+	akamai.StartSpinner("Updating Traffic Targets ", "")
 	for _, traffTarg := range trafficTargets {
 		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterId == dcID {
@@ -152,7 +145,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 			akamai.StopSpinnerFail()
 			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
 		}
-
+		if !c.IsSet("json") {
+			akamai.StopSpinnerOk()
+		}
 		// wait to complete?
 		if pComplete && propStat.PropagationStatus == "PENDING" {
 			var defaultInterval int = 5
@@ -163,39 +158,32 @@ func cmdUpdateProperty(c *cli.Context) error {
 			sleepTimeout *= time.Duration(defaultTimeout)
 			if !c.IsSet("json") {
 				fmt.Println(" ")
-				fmt.Printf("Waiting for completion .")
+				akamai.StartSpinner("Waiting for completion ", "")
 			}
 			for {
-				if !c.IsSet("json") {
-					fmt.Printf(".")
-				}
 				time.Sleep(sleepInterval * time.Second)
 				sleepTimeout -= sleepInterval
 				if propStat.PropagationStatus == "COMPLETE" {
 					if !c.IsSet("json") {
-						fmt.Println(" ")
-						fmt.Println("Change deployed")
+						akamai.StopSpinner("[Change deployed]", true)
 					}
 					break
 				} else if propStat.PropagationStatus == "DENIED" {
 					if !c.IsSet("json") {
-						fmt.Println(" ")
-						fmt.Println("Change denied")
+						akamai.StopSpinner("[Change denied]", true)
 					}
 					break
 				}
 				if sleepTimeout <= 0 {
 					if !c.IsSet("json") {
-						fmt.Println(" ")
-						fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+						akamai.StopSpinner("[Maximum wait time elapsed. Use query-status confirm successful deployment]", true)
 					}
 					break
 				}
 				propStat, err = configgtm.GetDomainStatus(domainName)
 				if err != nil {
 					if !c.IsSet("json") {
-						fmt.Println(" ")
-						fmt.Println("Unable to retrieve domain status")
+						akamai.StopSpinner("[Unable to retrieve domain status]", true)
 					}
 					break
 				}
@@ -215,11 +203,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 		if c.IsSet("json") && c.Bool("json") {
 			json, err := json.MarshalIndent(status, "", "  ")
 			if err != nil {
-				akamai.StopSpinnerFail()
 				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
 			}
 			fmt.Fprintln(c.App.Writer, string(json))
-			akamai.StopSpinner("", false)
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			if c.IsSet("verbose") && verboseStatus {
@@ -229,14 +215,11 @@ func cmdUpdateProperty(c *cli.Context) error {
 				fmt.Fprintln(c.App.Writer, " ")
 				fmt.Fprintln(c.App.Writer, status)
 			}
-			akamai.StopSpinnerOk()
 		}
 	} else {
-		if c.IsSet("json") {
-			akamai.StopSpinner("", false)
-		} else {
-			fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
+		if !c.IsSet("json") {
 			akamai.StopSpinnerOk()
+			fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
 		}
 	}
 

@@ -1,7 +1,7 @@
 [[constraint]]
   name = "github.com/akamai/AkamaiOPEN-edgegrid-golang"
 #  branch = "master"
-  version = "0.9.3"
+  version = "0.9.13"
 
 [[constraint]]
   branch = "master"
@@ -19,6 +19,10 @@
 [[constraint]]
   name = "github.com/urfave/cli"
   version = "1.20.0"
+
+[[override]]
+  name = "github.com/briandowns/spinner"
+  version = "1.11.1"
 
 [[override]]
   name = "github.com/russross/blackfriday"

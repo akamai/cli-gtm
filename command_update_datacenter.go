@@ -79,34 +79,23 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
 	}
 
-	if c.IsSet("json") {
-		akamai.StartSpinner("", "")
-	} else {
-		akamai.StartSpinner(
-			"Fetching data...",
-			fmt.Sprintf("Fetching domain properties ...... [%s]", color.GreenString("OK")))
-	}
-
-	// get domain. Serves two purposes. Validates domain exists and retrieves all the properties
 	if !c.IsSet("json") {
-		fmt.Println("Domain: ", domainName)
+		fmt.Println(fmt.Sprintf("Updating Datacenter(s) in domain %s ", domainName))
 	}
-	dom, err := configgtm.GetDomain(domainName)
 
+	dom, err := configgtm.GetDomain(domainName)
 	if err != nil {
-		akamai.StopSpinnerFail()
 		return cli.NewExitError(color.RedString("Domain "+domainName+" not found "), 1)
 	}
 	properties := dom.Properties
 	propmsg := fmt.Sprintf("%s contains %s properties", domainName, strconv.Itoa(len(properties)))
-	fmt.Sprintf(propmsg)
 	if !c.IsSet("json") {
 		fmt.Println(propmsg)
 	}
 	for _, propPtr := range properties {
 		changes_made := false
 		if !c.IsSet("json") {
-			fmt.Println(fmt.Sprintf("Property: %s", propPtr.Name))
+			akamai.StartSpinner(fmt.Sprintf("Updating Property: %s", propPtr.Name), "")
 		}
 		trafficTargets := propPtr.TrafficTargets
 		targetsmsg := fmt.Sprintf("%s contains %s targets", propPtr.Name, strconv.Itoa(len(trafficTargets)))
@@ -139,6 +128,9 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				}
 			}
 		}
+		if !c.IsSet("json") {
+			akamai.StopSpinnerOk()
+		}
 	}
 
 	if dcComplete && (len(succVerboseArray) > 0 || len(succShortArray) > 0) {
@@ -149,38 +141,32 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		sleepInterval *= time.Duration(defaultInterval)
 		sleepTimeout *= time.Duration(defaultTimeout)
 		if !c.IsSet("json") {
-			fmt.Println(" ")
-			fmt.Printf("Waiting for completion .")
+			akamai.StartSpinner("Waiting for completion ", "")
 		}
 		for {
 			dStat, err := configgtm.GetDomainStatus(domainName)
 			if err != nil {
-				fmt.Println(" ")
-				fmt.Println("Unable to retrieve domain status.")
+				if !c.IsSet("json") {
+					akamai.StopSpinner(" [Unable to retrieve domain status.]", true)
+				}
 				break
-			}
-			if !c.IsSet("json") {
-				fmt.Printf(".")
 			}
 			time.Sleep(sleepInterval * time.Second)
 			sleepTimeout -= sleepInterval
 			if dStat.PropagationStatus == "COMPLETE" {
 				if !c.IsSet("json") {
-					fmt.Println(" ")
-					fmt.Println("Change deployed")
+					akamai.StopSpinner(" [Change deployed]", true)
 				}
 				break
 			} else if dStat.PropagationStatus == "DENIED" {
 				if !c.IsSet("json") {
-					fmt.Println(" ")
-					fmt.Println("Change denied")
+					akamai.StopSpinner(" [Change denied]", true)
 				}
 				break
 			}
 			if sleepTimeout <= 0 {
 				if !c.IsSet("json") {
-					fmt.Println(" ")
-					fmt.Println("Maximum wait time elapsed. Use query-status confirm successful deployment")
+					akamai.StopSpinner(" [Maximum wait time elapsed. Use query-status confirm successful deployment]", true)
 				}
 				break
 			}
@@ -188,7 +174,6 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if len(properties) == 1 && len(failedArray) > 0 {
-		akamai.StopSpinnerFail()
 		return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s: %s", failedArray[0].PropName, failedArray[0].FailMsg)), 1)
 	}
 
@@ -203,25 +188,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if updateSum.Failed_Updates == nil && updateSum.Updated_Properties == nil {
-		if c.IsSet("json") {
-			akamai.StopSpinner("", false)
-		} else {
+		if !c.IsSet("json") {
 			fmt.Fprintln(c.App.Writer, "No property updates were needed.")
-			akamai.StopSpinnerOk()
 		}
 	} else {
 		if c.IsSet("json") && c.Bool("json") {
 			json, err := json.MarshalIndent(updateSum, "", "  ")
 			if err != nil {
-				akamai.StopSpinnerFail()
 				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
 			}
 			fmt.Fprintln(c.App.Writer, string(json))
-			akamai.StopSpinner("", false)
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			fmt.Fprintln(c.App.Writer, renderDCStatus(updateSum, c))
-			akamai.StopSpinnerOk()
 		}
 	}
 
