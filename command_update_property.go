@@ -31,6 +31,8 @@ import (
 func cmdUpdateProperty(c *cli.Context) error {
 
 	var pWeight float64
+	var pWeights []float64
+	var weights []string
 	var pServers []string
 	var pEnabled bool = true
 	var pDatacenters *arrayFlags
@@ -52,6 +54,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	// Changes may be to enabled, weight or servers
 	pWeight = c.Float64("weight")
+	weights = c.StringSlice("weights")
 	pServers = c.StringSlice("server")
 	if c.IsSet("enable") && c.IsSet("disable") {
 		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
@@ -85,6 +88,25 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
 	}
+	if c.IsSet("weights") {
+		if c.IsSet("weight") {
+			return cli.NewExitError(color.RedString("weight and weights cannot both be specified"), 1)
+		} else if len(pDatacenters.flagList) != len(weights) {
+			msg := fmt.Sprintf("number of weights (%s) must equal number of Data Centers specified (%s)",
+				strconv.Itoa(len(weights)), strconv.Itoa(len(pDatacenters.flagList)))
+			return cli.NewExitError(color.RedString(msg), 1)
+		} else {
+			for _, weight := range weights {
+				var value float64
+				value, err = strconv.ParseFloat(weight, 64)
+				if err == nil {
+					pWeights = append(pWeights, value)
+				} else {
+					return cli.NewExitError(color.RedString("weight vaues must be integer or floating point"), 1)
+				}
+			}
+		}
+	}
 	if c.IsSet("json") {
 		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
 	}
@@ -103,7 +125,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	fmt.Sprintf(targetsmsg)
 	akamai.StartSpinner("Updating Traffic Targets ", "")
 	for _, traffTarg := range trafficTargets {
-		for _, dcID := range pDatacenters.flagList {
+		for i, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterId == dcID {
 				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
@@ -113,6 +135,10 @@ func cmdUpdateProperty(c *cli.Context) error {
 				if c.IsSet("weight") && traffTarg.Weight != pWeight {
 					// Note: weight will be ignored for a number of property types
 					traffTarg.Weight = pWeight
+					changes_made = true
+				}
+				if c.IsSet("weights") && traffTarg.Weight != pWeights[i] {
+					traffTarg.Weight = pWeights[i]
 					changes_made = true
 				}
 				if c.IsSet("server") {
