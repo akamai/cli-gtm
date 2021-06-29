@@ -141,6 +141,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Usage: "Apply 'weight' to specified datacenter.",
 			},
 			cli.StringSliceFlag{
+				Name:  "weights",
+				Usage: "Apply these 'weight' values to the specified datacenters.",
+			},
+			cli.StringSliceFlag{
 				Name:  "server",
 				Usage: "Update target server for specified datacenter. Multiple server flags may be specified.",
 			},

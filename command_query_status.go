@@ -53,6 +53,7 @@ type EnhancedPropertyStatus struct {
 type TimestampPropertyStatus struct {
 	reportsgtm.DCTDRow
 	Enabled bool
+	Weight float64
 }
 
 // DCStatusDetail represents individual data center traffic status.
@@ -87,6 +88,7 @@ type PropertyDCStatus struct {
 	DCTotalPeriodRequests int64
 	DCPropertyUsage       string
 	DCEnabled             bool
+	DCWeight              float64
 }
 
 var defaultPeriod time.Duration = 15 * 60 * 1000 * 1000
@@ -126,6 +128,7 @@ func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string
 type trafficTargetEnabledStatus struct {
 	ttDCID    int
 	ttEnabled bool
+	ttWeight  float64
 }
 
 // Build DC Properties enabled Map
@@ -136,7 +139,8 @@ func buildDCPropertiesEnabledMap(domain *configgtm.Domain, dcID int) map[string]
 		for _, tgt := range prop.TrafficTargets {
 			// collect enabled status
 			if tgt.DatacenterId == dcID {
-				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled}
+				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled,
+				                                          ttWeight: tgt.Weight}
 				propEnabledMap[prop.Name] = ttMapEntry
 			}
 		}
@@ -159,6 +163,7 @@ func buildDCPropertyList(domain *configgtm.Domain, dcID int) []EnhancedPropertyS
 				dcTimedProp.Requests = 0
 				dcTimedProp.Status = "0"
 				dcTimedProp.Enabled = traffTarg.Enabled
+				dcTimedProp.Weight = traffTarg.Weight
 				dcProps = append(dcProps, dcTimedProp)
 				break
 			}
@@ -248,6 +253,7 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 					propRowData.Status = props.Status
 					if dcEnb, ok := enabledPropMapCopy[props.Name]; ok {
 						propRowData.Enabled = dcEnb.ttEnabled
+						propRowData.Weight = dcEnb.ttWeight
 					}
 					delete(enabledPropMapCopy, props.Name)
 					propsList = append(propsList, propRowData)
@@ -259,6 +265,7 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 					propRowData.Requests = 0
 					propRowData.Status = "0"
 					propRowData.Enabled = eInfo.ttEnabled
+					propRowData.Weight = eInfo.ttWeight
 					propsList = append(propsList, propRowData)
 				}
 				enhPropStat.Properties = propsList
@@ -335,6 +342,7 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 		ttName     string
 		ttNickname string
 		ttEnabled  bool
+		ttWeight   float64
 	}
 	ttEnabledMap := make(map[int]trafficTargetEnabledStatus)
 	prop, err := configgtm.GetProperty(qsProperty, domainName)
@@ -344,7 +352,8 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	}
 	for _, tgt := range prop.TrafficTargets {
 		// collect enabled status for later use
-		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled}
+		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled, 
+												 ttWeight: tgt.Weight}
 		// need info from DC, e.g. nickname
 		dc, err := configgtm.GetDatacenter(tgt.DatacenterId, domainName)
 		if err == nil {
@@ -404,6 +413,7 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 				propertyDCStatus.DCPropertyUsage = fmt.Sprintf("%.2f", dcReqMap[dc.DatacenterId].perc) + "%"
 				propertyDCStatus.DCTotalPeriodRequests = dcReqMap[dc.DatacenterId].reqs
 				propertyDCStatus.DCEnabled = ttEnabledMap[dc.DatacenterId].ttEnabled
+				propertyDCStatus.DCWeight = ttEnabledMap[dc.DatacenterId].ttWeight
 				propertyDCStatusArray = append(propertyDCStatusArray, propertyDCStatus)
 				// remove entry from map ...
 				delete(ttEnabledMap, dc.DatacenterId)
@@ -417,6 +427,7 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 		disabledDCSum.DatacenterId = dcId
 		disabledDCSum.TrafficTargetName = eMap.ttName
 		disabledDCSum.DCEnabled = eMap.ttEnabled
+		disabledDCSum.DCWeight = eMap.ttWeight
 		disabledDCSum.Nickname = eMap.ttNickname
 		disabledDCSum.DCPropertyUsage = "0.00%"
 		disabledDCSum.IPs = make([]*reportsgtm.IpStatIp, 0)
@@ -598,14 +609,14 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	table := tablewriter.NewWriter(tableString)
 	outString += fmt.Sprintln("Status Summary -- Last Update: ", objStatus.StatusSummary.LastUpdate, ", CutOff: ", objStatus.StatusSummary.CutOff)
 	outString += fmt.Sprintln(" ")
-	table.SetHeader([]string{"Datacenter", "Nickname", "Target Name", "Enabled", "Total Requests", "Property Usage", "IP", "State"})
+	table.SetHeader([]string{"Datacenter", "Nickname", "Target Name", "Enabled", "Weight", "Total Requests", "Property Usage", "IP", "State"})
 	table.SetReflowDuringAutoWrap(false)
 	table.SetCenterSeparator(" ")
 	table.SetColumnSeparator(" ")
 	table.SetRowSeparator(" ")
 	table.SetBorder(false)
 	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
+	table.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	dclid := " "
@@ -616,6 +627,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	dcpperc := " "
 	dcip := " "
 	dcenabled := " "
+	dcweight := " "
 	if len(objStatus.StatusSummary.PropertyDCStatus) == 0 {
 		rowData := []string{"No status summary data available", " ", " ", " ", " ", " ", " ", " ", " "}
 		table.Append(rowData)
@@ -626,6 +638,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 			dctn = dc.TrafficTargetName
 			dcpperc = dc.DCPropertyUsage
 			dcenabled = strconv.FormatBool(dc.DCEnabled)
+			dcweight = strconv.FormatFloat(dc.DCWeight, 'f', 1, 64)
 			dcptr = strconv.FormatInt(dc.DCTotalPeriodRequests, 10)
 			if len(dc.IPs) < 1 {
 				dc.IPs = []*reportsgtm.IpStatIp{&reportsgtm.IpStatIp{}}
@@ -641,8 +654,9 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 					dcpperc = " "
 					dcptr = " "
 					dcenabled = " "
+					dcweight = " "
 				}
-				rowData := []string{dclid, dcln, dctn, dcenabled, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
+				rowData := []string{dclid, dcln, dctn, dcenabled, dcweight, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
 				table.Append(rowData)
 				rowData = []string{"", "", "", "", "", "", " ", fmt.Sprintf("Score: %s", fmt.Sprintf("%.2f", ip.Score))}
 				table.Append(rowData)
