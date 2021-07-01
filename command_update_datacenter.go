@@ -17,7 +17,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
@@ -27,6 +27,8 @@ import (
 	"time"
 )
 
+var dcTimeout int = defaultTimeout
+var dcDryrun bool = false
 var dcEnabled bool = true
 var dcComplete bool = false
 var dcDatacenters *arrayFlags
@@ -34,6 +36,7 @@ var dcDatacenters *arrayFlags
 var succShortArray []*SuccUpdateShort
 var succVerboseArray []*SuccUpdateVerbose
 var failedArray []*FailUpdate
+var dryrunArray []string
 
 // worker function for update-datacenter
 func cmdUpdateDatacenter(c *cli.Context) error {
@@ -65,6 +68,13 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	if c.IsSet("complete") {
 		dcComplete = true
 	}
+	if c.IsSet("dryrun") {
+		dcDryrun = true
+	}
+	if c.IsSet("timeout") {
+		dcTimeout = c.Int("timeout")
+	}
+
 	// if nicknames specified, add to dcFlags
 	err = ParseNicknames(dcDatacenters.nicknamesList, domainName)
 	if err != nil {
@@ -114,6 +124,20 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 			}
 		}
 		if changes_made {
+			if dcDryrun {
+				json, err := json.MarshalIndent(propPtr, "", "  ")
+				if err != nil {
+					propError := &FailUpdate{PropName: propPtr.Name, FailMsg: err.Error()}
+					failedArray = append(failedArray, propError)
+				} else {
+					dryrunArray = append(dryrunArray, string(json))
+				}
+				if !c.IsSet("json") {
+					akamai.StopSpinnerOk()
+				}
+				continue
+			}
+
 			stat, err := propPtr.Update(domainName)
 			if err != nil {
 				propError := &FailUpdate{PropName: propPtr.Name, FailMsg: err.Error()}
@@ -134,12 +158,10 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	if dcComplete && (len(succVerboseArray) > 0 || len(succShortArray) > 0) {
-		var defaultInterval int = 5
-		var defaultTimeout int = 300
 		var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
 		var sleepTimeout time.Duration = 1  // seconds. TODO: Should be configurable by user ...
 		sleepInterval *= time.Duration(defaultInterval)
-		sleepTimeout *= time.Duration(defaultTimeout)
+		sleepTimeout *= time.Duration(dcTimeout)
 		if !c.IsSet("json") {
 			akamai.StartSpinner("Waiting for completion ", "")
 		}
@@ -178,6 +200,17 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	}
 
 	updateSum := UpdateSummary{}
+	if dcDryrun {
+		updateSum.Updated_Properties = dryrunArray
+		updateSum.Failed_Updates = failedArray
+		json, err := json.MarshalIndent(updateSum, "", "  ")
+		if err != nil {
+			return cli.NewExitError(color.RedString("Unable to display dryrun results"), 1)
+		}
+		fmt.Fprintln(c.App.Writer, string(json))
+		return nil
+	}
+
 	if c.IsSet("verbose") && verboseStatus && len(succVerboseArray) > 0 {
 		updateSum.Updated_Properties = succVerboseArray
 	} else if len(succShortArray) > 0 {

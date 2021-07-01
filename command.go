@@ -15,7 +15,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	gtm "github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/urfave/cli"
 	"strconv"
@@ -28,7 +31,13 @@ type arrayFlags struct {
 	nicknamesList  []string
 }
 
+type TargetFlags struct {
+	targetList map[int]string
+	targets    []gtm.TrafficTarget
+}
+
 var dcFlags arrayFlags
+var targetFlags TargetFlags
 
 func (i *arrayFlags) String() string {
 
@@ -66,6 +75,53 @@ func (i *arrayFlags) Set(value string) error {
 
 	i.flagList = append(i.flagList, intVal)
 	i.flagStringList = append(i.flagStringList, value)
+	return nil
+}
+
+func (t *TargetFlags) String() string {
+
+	if len(t.targets) == 0 {
+		return ""
+	}
+	tString := ""
+	for _, targ := range t.targets {
+		json, err := json.MarshalIndent(targ, "", "  ")
+		if err == nil {
+			tString += string(json) + "\n\n"
+		}
+	}
+
+	return tString
+}
+
+func (t *TargetFlags) Get(indx int) gtm.TrafficTarget {
+
+	if indx < len(t.targets) {
+		return t.targets[indx]
+	}
+	return gtm.TrafficTarget{}
+}
+
+func (t *TargetFlags) Set(value string) error {
+
+	if targetFlags.targetList == nil {
+		targetFlags.targetList = map[int]string{}
+	}
+	target := gtm.TrafficTarget{}
+	if err := json.Unmarshal([]byte(value), &target); err != nil {
+		return err
+	}
+	targetFlags.targetList[target.DatacenterId] = ""
+	for _, v := range t.targets {
+		if v.DatacenterId == target.DatacenterId {
+			if v.Enabled == target.Enabled && v.Weight == target.Weight {
+				return nil
+			}
+			return fmt.Errorf("Target %d already specified with different values", target.DatacenterId)
+		}
+	}
+	targetFlags.targets = append(targetFlags.targets, target)
+
 	return nil
 }
 
@@ -111,7 +167,16 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.BoolFlag{
 				Name:  "complete",
-				Usage: "Wait up to 5 minutes for change completion.",
+				Usage: "Wait for change completion.",
+			},
+			cli.IntFlag{
+				Name:  "timeout",
+				Usage: "Change completion wait timeout in seconds.",
+				Value: 300,
+			},
+			cli.BoolFlag{
+				Name:  "dryrun",
+				Usage: "Return planned Datacenter change.",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
@@ -140,9 +205,10 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Name:  "weight",
 				Usage: "Apply 'weight' to specified datacenter.",
 			},
-			cli.StringSliceFlag{
-				Name:  "weights",
-				Usage: "Apply these 'weight' values to the specified datacenters.",
+			cli.GenericFlag{
+				Name:  "target",
+				Usage: "Apply 'weight' and 'enabled' values to the specified target. Multiple target flags may be specified.",
+				Value: &targetFlags,
 			},
 			cli.StringSliceFlag{
 				Name:  "server",
@@ -158,7 +224,16 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.BoolFlag{
 				Name:  "complete",
-				Usage: "Wait up to 5 minutes for change completion",
+				Usage: "Wait for change completion.",
+			},
+			cli.IntFlag{
+				Name:  "timeout",
+				Usage: "Change completion wait timeout in seconds.",
+				Value: 300,
+			},
+			cli.BoolFlag{
+				Name:  "dryrun",
+				Usage: "Return planned Datacenter change.",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,

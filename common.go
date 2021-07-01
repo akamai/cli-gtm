@@ -15,7 +15,7 @@
 package main
 
 import (
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
 	"strconv"
 )
 

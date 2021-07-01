@@ -20,18 +20,16 @@ for your system, or by cloning this repository and compiling it yourself.
 
 ### Compiling from Source
 
-If you want to compile it from source, you will need Go 1.7 or later, and the [Dep](https://golang.github.io/dep/) package manager installed:
+If you want to compile it from source, you will need Go 1.14 or later.
 
 1. Fetch the package:  
   `go get github.com/akamai/cli-gtm`
 2. Change to the package directory:  
   `cd $GOPATH/src/github.com/akamai/cli-gtm`
-3. Install dependencies using `dep`:  
-  `dep ensure`
-4. Compile the binary:
-  - Linux/macOS/*nix: `go build -o akamai-gtm`
-  - Windows: `go build -o akamai-gtm.exe`
-5. Move the binary (`akamai-gtm` or `akamai-gtm.exe`) in to your `PATH`
+3. Compile the binary:
+   - Linux/macOS/nix: `go build -o akamai-gtm`
+   - Windows: `go build -o akamai-gtm.exe`
+4. Move the binary (`akamai-gtm` or `akamai-gtm.exe`) in to your `PATH`
 
 ## Usage
 
@@ -42,7 +40,7 @@ Description:
    Manage GTM Domains and assoc objects
 
 Global Flags:
-   --edgerc value  Location of the credentials file (default: "/home/elynes/.edgerc") [$AKAMAI_EDGERC]
+   --edgerc value  Location of the credentials file (default: "/home/testuser/.edgerc") [$AKAMAI_EDGERC]
    --section value     Section of the credentials file (default: "gtm") [$AKAMAI_EDGERC_SECTION]
 
 Built-In Commands:
@@ -53,33 +51,125 @@ Built-In Commands:
   help
 ```
 
+### update-datacenter
+
+```
+$ akamai gtm update-datacenter -help
+Name:
+   akamai-gtm update-datacenter
+
+Description:
+   Update datacenter configuration
+
+Usage:
+   akamai-gtm update-datacenter <domain> [--datacenter] [--enable] [--disable] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
+
+Flags:
+   --datacenter value  Apply change to specified datacenter by id or nickname.
+   --enable                Enable specified datacenter(s).
+   --disable               Disable specified datacenter(s).
+   --verbose               Display verbose result status.
+   --json                  Return status in JSON format.
+   --complete              Wait for change completion.
+   --timeout value         Change completion wait timeout in seconds. (default: 300)
+   --dryrun                Return planned Datacenter change.
+```
+
+### update-property
+
+```
+$ akamai gtm update-property -help
+Name:
+   akamai-gtm update-property
+
+Description:
+   Update property configuration
+
+Usage:
+   akamai-gtm update-property [domain, property] [--datacenter] [--enable] [--disable] [--weight] [--target] [--server] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
+
+Flags:
+   --datacenter value  Apply change to specified datacenter by id or nickname.
+   --enable                Enable specified datacenter(s).
+   --disable               Disable specified datacenter(s).
+   --weight value          Apply 'weight' to specified datacenter. (default: 0)
+   --target value          Apply 'weight' and 'enabled' values to the specified target. Multiple target flags may be specified.
+   --server value          Update target server for specified datacenter. Multiple server flags may be specified.
+   --verbose               Display verbose result status.
+   --json                  Return status in JSON format.
+   --complete              Wait for change completion.
+   --timeout value         Change completion wait timeout in seconds. (default: 300)
+   --dryrun                Return planned Datacenter change.
+```
+
+#### Target modifications
+
+Property targets may be modified or added to properties by using the `target` argument. An example is provided in the following Examples section. The tool will modify the fields specified only. The target value is valid json. Mispselled field names will be ignored, possibly leading to and invalid target configuration. Valid fields are:
+
+* datacenterId: int - Required
+* weight: float64 - Required
+* enabled: bool - Required
+* servers: string list - Optional
+* name: string - Optional
+* handoutCName: string - Optional
+
+### query-status
+
+```
+$ akamai gtm query-status -help
+Name:
+   akamai-gtm query-status
+
+Description:
+   Query current status of domain, property or datacenter
+
+Usage:
+   akamai-gtm query-status <domain> [--datacenter] [--property] [--verbose] [--json]
+
+Flags:
+   --datacenter value  Report status of specified datacenter by id or nickname.
+   --property value        Report status of specified property.
+   --verbose               Display verbose status.
+   --json                  Return status in JSON format.
+```
+
+## Examples
+
 ### Enable datacenters in domain
 
-To enable one or more datacenters:
+To enable one or more datacenters references in all property targets:
 
 ```
 $ akamai gtm update-datacenter example.akadns.net --datacenter 3131 --datacenter 3132 --enable
 ```
 
-### Update datacenters in property
+### Update traffic target in property
 
-To enable datacenters in a property:
+To enable a traffic target in a property:
 
 ```
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --disable
 ```
 
-To modify a datacenter's weight:                                    
+To modify a property target's weight:                                    
 
 ```
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --weight 20
 ```
 
-To midify a datacenter's servers:
+To modify a property target's servers:
 
 ```
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --server 1.2.3.6 --server 1.2.1.1
 ```
+
+To modify (3131) and add (3134) property traffic targets:
+
+```
+$ akamai gtm update-property test_property.com.akadns.net targettest --dryrun -target '{"datacenterId": 3131,"weight":30,"enabled":true,"servers":["1.5.6.7"]}' -target '{"datacenterId": 3134,"weight":30,"enabled":true,"servers":["1.5.6.8"]}'
+```
+
+Note the dryrun directive in the command line.
 
 ### Query Status 
 

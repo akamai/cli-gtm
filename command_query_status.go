@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/reportsgtm-v1"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
@@ -53,7 +53,7 @@ type EnhancedPropertyStatus struct {
 type TimestampPropertyStatus struct {
 	reportsgtm.DCTDRow
 	Enabled bool
-	Weight float64
+	Weight  float64
 }
 
 // DCStatusDetail represents individual data center traffic status.
@@ -140,7 +140,7 @@ func buildDCPropertiesEnabledMap(domain *configgtm.Domain, dcID int) map[string]
 			// collect enabled status
 			if tgt.DatacenterId == dcID {
 				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled,
-				                                          ttWeight: tgt.Weight}
+					ttWeight: tgt.Weight}
 				propEnabledMap[prop.Name] = ttMapEntry
 			}
 		}
@@ -352,8 +352,8 @@ func gatherPropertyStatus() (*PropertyStatus, error) {
 	}
 	for _, tgt := range prop.TrafficTargets {
 		// collect enabled status for later use
-		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled, 
-												 ttWeight: tgt.Weight}
+		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled,
+			ttWeight: tgt.Weight}
 		// need info from DC, e.g. nickname
 		dc, err := configgtm.GetDatacenter(tgt.DatacenterId, domainName)
 		if err == nil {
