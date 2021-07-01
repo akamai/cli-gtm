@@ -17,26 +17,31 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_3"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
 	akamai "github.com/akamai/cli-common-golang"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
+const defaultInterval int = 5
+const defaultTimeout int = 300
+
 // worker function for update-property
 func cmdUpdateProperty(c *cli.Context) error {
 
 	var pWeight float64
-	var pWeights []float64
-	var weights []string
+	var pTargets *TargetFlags
 	var pServers []string
 	var pEnabled bool = true
 	var pDatacenters *arrayFlags
 	var pComplete bool = false
+	var pTimeout int = defaultTimeout
+	var pDryrun bool = false
 	config, err := akamai.GetEdgegridConfig(c)
 	if err != nil {
 		return err
@@ -54,7 +59,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	// Changes may be to enabled, weight or servers
 	pWeight = c.Float64("weight")
-	weights = c.StringSlice("weights")
 	pServers = c.StringSlice("server")
 	if c.IsSet("enable") && c.IsSet("disable") {
 		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
@@ -64,13 +68,20 @@ func cmdUpdateProperty(c *cli.Context) error {
 		pEnabled = false
 	}
 	pDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+	pTargets = (c.Generic("target")).(*TargetFlags)
 	if c.IsSet("verbose") {
 		verboseStatus = true
 	}
 	if c.IsSet("complete") {
 		pComplete = true
 	}
-	if !c.IsSet("datacenter") {
+	if c.IsSet("dryrun") {
+		pDryrun = true
+	}
+	if c.IsSet("timeout") {
+		pTimeout = c.Int("timeout")
+	}
+	if !c.IsSet("target") && !c.IsSet("datacenter") {
 		return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
@@ -88,24 +99,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
 	}
-	if c.IsSet("weights") {
-		if c.IsSet("weight") {
-			return cli.NewExitError(color.RedString("weight and weights cannot both be specified"), 1)
-		} else if len(pDatacenters.flagList) != len(weights) {
-			msg := fmt.Sprintf("number of weights (%s) must equal number of Data Centers specified (%s)",
-				strconv.Itoa(len(weights)), strconv.Itoa(len(pDatacenters.flagList)))
-			return cli.NewExitError(color.RedString(msg), 1)
-		} else {
-			for _, weight := range weights {
-				var value float64
-				value, err = strconv.ParseFloat(weight, 64)
-				if err == nil {
-					pWeights = append(pWeights, value)
-				} else {
-					return cli.NewExitError(color.RedString("weight vaues must be integer or floating point"), 1)
-				}
-			}
-		}
+	if c.IsSet("weight") && c.IsSet("target") {
+		return cli.NewExitError(color.RedString("weight and target cannot both be specified"), 1)
 	}
 	if c.IsSet("json") {
 		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
@@ -124,8 +119,54 @@ func cmdUpdateProperty(c *cli.Context) error {
 	}
 	fmt.Sprintf(targetsmsg)
 	akamai.StartSpinner("Updating Traffic Targets ", "")
+	var propTargets = map[int]string{}
 	for _, traffTarg := range trafficTargets {
-		for i, dcID := range pDatacenters.flagList {
+		// Al traffic target fields can be updated via target.
+		if c.IsSet("target") {
+			for _, targ := range pTargets.targets {
+				propTargets[traffTarg.DatacenterId] = ""
+				if traffTarg.DatacenterId == targ.DatacenterId {
+					// required
+					if traffTarg.Weight != targ.Weight {
+						traffTarg.Weight = targ.Weight
+						changes_made = true
+					}
+					// required
+					if traffTarg.Enabled != targ.Enabled {
+						traffTarg.Enabled = targ.Enabled
+						changes_made = true
+					}
+					// optional
+					if len(targ.Servers) > 0 {
+						if len(targ.Servers) != len(traffTarg.Servers) {
+							traffTarg.Servers = targ.Servers
+							changes_made = true
+						} else {
+							sort.Strings(targ.Servers)
+							sort.Strings(traffTarg.Servers)
+							for i, v := range traffTarg.Servers {
+								if v != targ.Servers[i] {
+									traffTarg.Servers = targ.Servers
+									changes_made = true
+								}
+							}
+						}
+					}
+					// optional
+					if traffTarg.HandoutCName != targ.HandoutCName && targ.HandoutCName != "" {
+						traffTarg.HandoutCName = targ.HandoutCName
+						changes_made = true
+					}
+					// optional
+					if traffTarg.Name != targ.Name && targ.Name != "" {
+						traffTarg.Name = targ.Name
+						changes_made = true
+					}
+				}
+			}
+		}
+
+		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterId == dcID {
 				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
@@ -135,10 +176,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 				if c.IsSet("weight") && traffTarg.Weight != pWeight {
 					// Note: weight will be ignored for a number of property types
 					traffTarg.Weight = pWeight
-					changes_made = true
-				}
-				if c.IsSet("weights") && traffTarg.Weight != pWeights[i] {
-					traffTarg.Weight = pWeights[i]
 					changes_made = true
 				}
 				if c.IsSet("server") {
@@ -165,7 +202,40 @@ func cmdUpdateProperty(c *cli.Context) error {
 			}
 		}
 	}
+
+	if c.IsSet("target") {
+		// Any new target?
+		for cmdTarget, _ := range pTargets.targetList {
+			if _, ok := propTargets[cmdTarget]; !ok {
+				// New target. Find it
+				for _, t := range pTargets.targets {
+					if t.DatacenterId == cmdTarget {
+						property.TrafficTargets = append(property.TrafficTargets, &t)
+						changes_made = true
+						break
+					}
+				}
+			}
+		}
+	}
+
 	if changes_made {
+
+		if pDryrun {
+			json, err := json.MarshalIndent(property, "", "  ")
+			if err != nil {
+				return cli.NewExitError(color.RedString("Unable to display proposed property update"), 1)
+			}
+			fmt.Fprintln(c.App.Writer, "Proposed Property Update")
+			fmt.Fprintln(c.App.Writer, string(json))
+
+			if !c.IsSet("json") {
+				akamai.StopSpinnerOk()
+			}
+
+			return nil
+		}
+
 		propStat, err := property.Update(domainName)
 		if err != nil {
 			akamai.StopSpinnerFail()
@@ -176,12 +246,10 @@ func cmdUpdateProperty(c *cli.Context) error {
 		}
 		// wait to complete?
 		if pComplete && propStat.PropagationStatus == "PENDING" {
-			var defaultInterval int = 5
-			var defaultTimeout int = 300
 			var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
 			var sleepTimeout time.Duration = 1  // seconds. TODO: Should be configurable by user ...
 			sleepInterval *= time.Duration(defaultInterval)
-			sleepTimeout *= time.Duration(defaultTimeout)
+			sleepTimeout *= time.Duration(pTimeout)
 			if !c.IsSet("json") {
 				fmt.Println(" ")
 				akamai.StartSpinner("Waiting for completion ", "")
