@@ -140,22 +140,22 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 
 	commands = append(commands, cli.Command{
 		Name:        "update-datacenter",
-		Description: "Update datacenter configuration",
+		Description: "Update datacenter target configuration in all property references",
 		ArgsUsage:   "<domain>",
 		Action:      cmdUpdateDatacenter,
 		Flags: []cli.Flag{
 			cli.GenericFlag{
 				Name:  "datacenter",
-				Usage: "Apply change to specified datacenter by id or nickname.",
+				Usage: "Apply change to specified datacenter traffic target in all property references by id or nickname.",
 				Value: &dcFlags,
 			},
 			cli.BoolTFlag{
 				Name:  "enable",
-				Usage: "Enable specified datacenter(s).",
+				Usage: "Enable specified datacenter traffic target(s) in all property references.",
 			},
 			cli.BoolFlag{
 				Name:  "disable",
-				Usage: "Disable specified datacenter(s).",
+				Usage: "Disable specified datacenter traffic target(s) in all property references.",
 			},
 			cli.BoolFlag{
 				Name:  "verbose",
@@ -176,7 +176,7 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.BoolFlag{
 				Name:  "dryrun",
-				Usage: "Return planned Datacenter change.",
+				Usage: "Return planned datacenter traffic target change(s).",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
@@ -190,29 +190,29 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		Flags: []cli.Flag{
 			cli.GenericFlag{
 				Name:  "datacenter",
-				Usage: "Apply change to specified datacenter by id or nickname.",
+				Usage: "Apply change to specified datacenter traffic target by id or nickname. Multiple datacenters may be specified.",
 				Value: &dcFlags,
 			},
 			cli.BoolTFlag{
 				Name:  "enable",
-				Usage: "Enable specified datacenter(s).",
+				Usage: "Enable specified datacenter traffic target.",
 			},
 			cli.BoolFlag{
 				Name:  "disable",
-				Usage: "Disable specified datacenter(s).",
+				Usage: "Disable specified datacenter traffic target.",
 			},
 			cli.Float64Flag{
 				Name:  "weight",
-				Usage: "Apply 'weight' to specified datacenter.",
+				Usage: "Apply 'weight' to specified datacenter traffic target.",
 			},
 			cli.GenericFlag{
 				Name:  "target",
-				Usage: "Apply 'weight' and 'enabled' values to the specified target. Multiple target flags may be specified.",
+				Usage: "Update specified target field values or add target if doesn't exist. Multiple target flags may be specified.",
 				Value: &targetFlags,
 			},
 			cli.StringSliceFlag{
 				Name:  "server",
-				Usage: "Update target server for specified datacenter. Multiple server flags may be specified.",
+				Usage: "Update server for specified datacenter traffic target. Multiple server flags may be specified.",
 			},
 			cli.BoolFlag{
 				Name:  "verbose",
@@ -233,7 +233,7 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			},
 			cli.BoolFlag{
 				Name:  "dryrun",
-				Usage: "Return planned Datacenter change.",
+				Usage: "Return planned property change(s).",
 			},
 		},
 		BashComplete: akamai.DefaultAutoComplete,
@@ -247,7 +247,7 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 		Flags: []cli.Flag{
 			cli.GenericFlag{
 				Name:  "datacenter",
-				Usage: "Report status of specified datacenter by id or nickname.",
+				Usage: "Report status of specified datacenter target by id or nickname.",
 				Value: &dcFlags,
 			},
 			cli.StringFlag{

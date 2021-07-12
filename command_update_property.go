@@ -82,7 +82,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		pTimeout = c.Int("timeout")
 	}
 	if !c.IsSet("target") && !c.IsSet("datacenter") {
-		return cli.NewExitError(color.RedString("datacenter(s) must be specified"), 1)
+		return cli.NewExitError(color.RedString("datacenter(s) and/or targets must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
 	err = ParseNicknames(pDatacenters.nicknamesList, domainName)
@@ -93,14 +93,22 @@ func cmdUpdateProperty(c *cli.Context) error {
 			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
 		}
 	}
+	if !c.IsSet("datacenter") && (c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
+		return cli.NewExitError(color.RedString("datacenter(s) must be specified when field changes are specified"), 1)
+	}
+	if c.IsSet("datacenter") && !(c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
+		return cli.NewExitError(color.RedString("datacenter(s) specified with no field changes"), 1)
+	}
+	for _, dcID := range pDatacenters.flagList {
+		if _, ok := pTargets.targetList[dcID]; ok {
+			return cli.NewExitError(color.RedString("datacenters and targets cannot be the same"), 1)
+		}
+	}
 	if c.IsSet("server") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
 	}
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
-	}
-	if c.IsSet("weight") && c.IsSet("target") {
-		return cli.NewExitError(color.RedString("weight and target cannot both be specified"), 1)
 	}
 	if c.IsSet("json") {
 		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
@@ -181,23 +189,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 				if c.IsSet("server") {
 					traffTarg.Servers = pServers
 					changes_made = true
-
-					/*
-					   // See if we really are updating ...
-					   if len(pServers) != len(traffTarg.Servers) {
-					           traffTarg.Servers = pServers
-					           changes_made = true
-					   } else {
-					           sort.Sort(pServers)
-					           sort.Sort(traffTarg.Servers)
-					           for i, v := range traffTarg.Servers {
-					                   if v != pServers[i] {
-					                           traffTarg.Servers = pServers
-					                           changes_made = true
-					                   }
-					           }
-					   }
-					*/
 				}
 			}
 		}
