@@ -40,7 +40,7 @@ Description:
    Manage GTM Domains and assoc objects
 
 Global Flags:
-   --edgerc value  Location of the credentials file (default: "/home/testuser/.edgerc") [$AKAMAI_EDGERC]
+   --edgerc value      Location of the credentials file (default: "/home/testuser/.edgerc") [$AKAMAI_EDGERC]
    --section value     Section of the credentials file (default: "gtm") [$AKAMAI_EDGERC_SECTION]
 
 Built-In Commands:
@@ -65,14 +65,14 @@ Usage:
    akamai-gtm update-datacenter <domain> [--datacenter] [--enable] [--disable] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
 
 Flags:
-   --datacenter value  Apply change to specified datacenter by id or nickname.
-   --enable                Enable specified datacenter(s).
-   --disable               Disable specified datacenter(s).
+   --datacenter value      Apply change to specified datacenter traffic target in all property references by id or nickname.
+   --enable                Enable specified datacenter traffic target(s) in all property references.
+   --disable               Disable specified datacenter traffic target(s) in all property references.
    --verbose               Display verbose result status.
    --json                  Return status in JSON format.
    --complete              Wait for change completion.
    --timeout value         Change completion wait timeout in seconds. (default: 300)
-   --dryrun                Return planned Datacenter change.
+   --dryrun                Return planned datacenter traffic target change(s).
 ```
 
 ### update-property
@@ -89,17 +89,17 @@ Usage:
    akamai-gtm update-property [domain, property] [--datacenter] [--enable] [--disable] [--weight] [--target] [--server] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
 
 Flags:
-   --datacenter value  Apply change to specified datacenter by id or nickname.
-   --enable                Enable specified datacenter(s).
-   --disable               Disable specified datacenter(s).
-   --weight value          Apply 'weight' to specified datacenter. (default: 0)
-   --target value          Apply 'weight' and 'enabled' values to the specified target. Multiple target flags may be specified.
-   --server value          Update target server for specified datacenter. Multiple server flags may be specified.
+   --datacenter value      Apply change to specified datacenter traffic target by id or nickname. Multiple datacenters may be specified.
+   --enable                Enable specified datacenter traffic target.
+   --disable               Disable specified datacenter traffic target.
+   --weight value          Apply 'weight' to specified datacenter traffic target. (default: 0)
+   --target value          Update specified traffic target field values or add traffic target if doesn't exist. Multiple target flags may be specified.
+   --server value          Update server for specified datacenter traffic target. Multiple server flags may be specified.
    --verbose               Display verbose result status.
    --json                  Return status in JSON format.
    --complete              Wait for change completion.
    --timeout value         Change completion wait timeout in seconds. (default: 300)
-   --dryrun                Return planned Datacenter change.
+   --dryrun                Return planned property change.
 ```
 
 #### Target modifications
