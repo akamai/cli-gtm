@@ -169,6 +169,12 @@ To modify (3131) and add (3134) property traffic targets:
 $ akamai gtm update-property test_property.com.akadns.net targettest --dryrun -target '{"datacenterId": 3131,"weight":30,"enabled":true,"servers":["1.5.6.7"]}' -target '{"datacenterId": 3134,"weight":30,"enabled":true,"servers":["1.5.6.8"]}'
 ```
 
+Note: On Windows platforms, use double quotes to enclose the target JSON string and escape the double quotes within the JSON. E.g.
+
+```
+C:\temp> akamai-gtm.exe --edgerc c:\scratch\.edgerc --section default update-property test_property.com.akadns.net targettest --target "{\"datacenterId\": 3131,\"weight\":0,\"enabled\":true}" --target "{\"datacenterId\": 3134,\"weight\":0,\"enabled\":true}"
+```
+
 Note the dryrun directive in the command line.
 
 ### Query Status 
