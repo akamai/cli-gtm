@@ -86,20 +86,21 @@ Description:
    Update property configuration
 
 Usage:
-   akamai-gtm update-property [domain, property] [--datacenter] [--enable] [--disable] [--weight] [--target] [--server] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
+   akamai-gtm update-property [domain, property] [--datacenter] [--liveness_test] [--enable] [--disable] [--weight] [--target] [--server] [--verbose] [--json] [--complete] [--timeout] [--dryrun]
 
 Flags:
    --datacenter value      Apply change to specified datacenter traffic target by id or nickname. Multiple datacenters may be specified.
-   --enable                Enable specified datacenter traffic target.
-   --disable               Disable specified datacenter traffic target.
+   --liveness_test value   Apply change to specified liveness test. Multiple liveness tests may be specified.
+   --enable                Enable specified datacenter traffic target or property liveness_test.
+   --disable               Disable specified datacenter traffic target or property liveness_test.
    --weight value          Apply 'weight' to specified datacenter traffic target. (default: 0)
-   --target value          Update specified traffic target field values or add traffic target if doesn't exist. Multiple target flags may be specified.
+   --target value          Update specified target field values or add target if doesn't exist. Multiple target flags may be specified.
    --server value          Update server for specified datacenter traffic target. Multiple server flags may be specified.
    --verbose               Display verbose result status.
    --json                  Return status in JSON format.
    --complete              Wait for change completion.
    --timeout value         Change completion wait timeout in seconds. (default: 300)
-   --dryrun                Return planned property change.
+   --dryrun                Return planned property change(s).
 ```
 
 #### Target modifications
@@ -176,6 +177,12 @@ C:\temp> akamai-gtm.exe --edgerc c:\scratch\.edgerc --section default update-pro
 ```
 
 Note the dryrun directive in the command line.
+
+To disable a liveness test in a property:
+
+```
+$ akamai gtm update-property example.akadns.net testproperty --liveness_test test --disable
+```
 
 ### Query Status 
 

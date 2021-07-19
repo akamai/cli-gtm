@@ -1,5 +1,12 @@
 # CLI-GTM Release Notes
 
+## Version 0.4.0
+
+* Add support to property update to enable/disable liveness tests
+* Change .edgerc section default to 'default'
+* Add account-key as accountkey flag alias
+* Update README
+
 ## Version 0.3.0 
 
 ### Features/Enhancements
