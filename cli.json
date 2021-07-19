@@ -5,7 +5,7 @@
   "commands": [
     {
       "name": "gtm",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Manage GTM Domains",
       "bin": "https://github.com/akamai/cli-gtm/releases/download/{{.Version}}/akamai-{{.Name}}-{{.Version}}-{{.OS}}{{.Arch}}{{.BinSuffix}}",
       "auto-complete": true

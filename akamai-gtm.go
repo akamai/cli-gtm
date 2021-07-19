@@ -1,4 +1,4 @@
-// Copyright 2019. Akamai Technologies, Inc
+// Copyright 2019-2021. Akamai Technologies, Inc
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	VERSION = "0.3.0"
+	VERSION = "0.4.0"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 		"A CLI for GTM",
 		"Manage GTM Domains and assoc objects",
 		VERSION,
-		"gtm",
+		"default",
 		commandLocator,
 	)
 

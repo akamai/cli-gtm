@@ -193,13 +193,17 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Usage: "Apply change to specified datacenter traffic target by id or nickname. Multiple datacenters may be specified.",
 				Value: &dcFlags,
 			},
+			cli.StringSliceFlag{
+				Name:  "liveness_test",
+				Usage: "Apply change to specified liveness test. Multiple liveness tests may be specified.",
+			},
 			cli.BoolTFlag{
 				Name:  "enable",
-				Usage: "Enable specified datacenter traffic target.",
+				Usage: "Enable specified datacenter traffic target or property liveness_test.",
 			},
 			cli.BoolFlag{
 				Name:  "disable",
-				Usage: "Disable specified datacenter traffic target.",
+				Usage: "Disable specified datacenter traffic target or property liveness_test.",
 			},
 			cli.Float64Flag{
 				Name:  "weight",

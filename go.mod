@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/akamai/AkamaiOPEN-edgegrid-golang v1.1.1
-	github.com/akamai/cli-common-golang v0.0.0-20190304161655-ff6f30c42c80
+	github.com/akamai/cli-common-golang v0.0.0-20210716202303-5a2a24172430
 	github.com/briandowns/spinner v1.11.1 // indirect
 	github.com/fatih/color v1.7.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect

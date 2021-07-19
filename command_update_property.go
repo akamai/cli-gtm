@@ -37,6 +37,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	var pWeight float64
 	var pTargets *TargetFlags
 	var pServers []string
+	var pLivenessTests []string
 	var pEnabled bool = true
 	var pDatacenters *arrayFlags
 	var pComplete bool = false
@@ -60,6 +61,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 	// Changes may be to enabled, weight or servers
 	pWeight = c.Float64("weight")
 	pServers = c.StringSlice("server")
+	pLivenessTests = c.StringSlice("liveness_test")
+	fmt.Println("pLivenessTests: ", pLivenessTests)
 	if c.IsSet("enable") && c.IsSet("disable") {
 		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
 	} else if c.IsSet("enable") {
@@ -81,8 +84,11 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if c.IsSet("timeout") {
 		pTimeout = c.Int("timeout")
 	}
-	if !c.IsSet("target") && !c.IsSet("datacenter") {
-		return cli.NewExitError(color.RedString("datacenter(s) and/or targets must be specified"), 1)
+	if c.IsSet("datacenter") && c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
+		return cli.NewExitError(color.RedString("enable/disable can only be applied to either datacenter(s) OR liveness_test(s)"), 1)
+	}
+	if !c.IsSet("target") && !c.IsSet("datacenter") && !c.IsSet("liveness_test") {
+		return cli.NewExitError(color.RedString("datacenter(s), target(s) and/or liveness_test(s)s must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
 	err = ParseNicknames(pDatacenters.nicknamesList, domainName)
@@ -93,8 +99,14 @@ func cmdUpdateProperty(c *cli.Context) error {
 			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
 		}
 	}
-	if !c.IsSet("datacenter") && (c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("datacenter(s) must be specified when field changes are specified"), 1)
+	if !c.IsSet("datacenter") && !c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
+		return cli.NewExitError(color.RedString("datacenter(s) or liveness_test(s) must be specified when enable or disable are specified"), 1)
+	}
+	if !c.IsSet("datacenter") && (c.IsSet("server") || c.IsSet("weight")) {
+		return cli.NewExitError(color.RedString("datacenter(s) must be specified when server or weight field changes are specified"), 1)
+	}
+	if c.IsSet("liveness_test") && !(c.IsSet("enable") || c.IsSet("disable")) {
+		return cli.NewExitError(color.RedString("liveness_test(s) specified without enable or disable directive"), 1)
 	}
 	if c.IsSet("datacenter") && !(c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
 		return cli.NewExitError(color.RedString("datacenter(s) specified with no field changes"), 1)
@@ -205,6 +217,25 @@ func cmdUpdateProperty(c *cli.Context) error {
 						changes_made = true
 						break
 					}
+				}
+			}
+		}
+	}
+
+	// enable/disable property liveness tests?
+	if len(pLivenessTests) > 0 {
+		testList := strings.Join(pLivenessTests, " ")
+		fmt.Println("livesness tests: ", testList)
+		for _, test := range property.LivenessTests {
+			fmt.Println("Processing livesness test: ", test.Name)
+			if strings.Contains(testList, test.Name) {
+				fmt.Println("Livesness test match!")
+				fmt.Println("pEnabled: ", pEnabled)
+				fmt.Println("test.Disabled: ", test.Disabled)
+				if (c.IsSet("enable") || c.IsSet("disable")) && test.Disabled != !pEnabled {
+					// logic is reversed.
+					test.Disabled = !pEnabled
+					changes_made = true
 				}
 			}
 		}
