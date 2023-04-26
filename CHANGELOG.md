@@ -1,5 +1,10 @@
 # CLI-GTM Release Notes
 
+## Version 0.5.0
+
+* Add M1 support
+* Migrate to go 1.18
+
 ## Version 0.4.0
 
 * Add support to property update to enable/disable liveness tests
