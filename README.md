@@ -23,11 +23,10 @@ for your system, or by cloning this repository and compiling it yourself.
 If you want to compile it from source, you will need Go 1.14 or later.
 
 1. Create a clone of the target repository:  
-  `go clone https://github.com/akamai/cli-gtm.git`
+  `git clone https://github.com/akamai/cli-gtm.git`
 2. Compile the binary:
    - Linux/macOS/nix: `go build -o akamai-gtm`
    - Windows: `go build -o akamai-gtm.exe`
-3. Move the binary (`akamai-gtm` or `akamai-gtm.exe`) in to your `PATH`
 
 ## Usage
 
