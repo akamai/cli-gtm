@@ -24,7 +24,7 @@ If you want to compile it from source, you will need Go 1.14 or later.
 
 1. Create a clone of the target repository:  
   `git clone https://github.com/akamai/cli-gtm.git`
-2. Compile the binary:
+2. Change to the package directory and compile the binary:
    - Linux/macOS/nix: `go build -o akamai-gtm`
    - Windows: `go build -o akamai-gtm.exe`
 
