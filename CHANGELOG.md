@@ -1,11 +1,15 @@
-# CLI-GTM Release Notes
+# Release Notes
 
 ## Version 0.5.0 (May 10, 2023)
+
+### Features/Enhancements
 
 * Add M1 support
 * Migrate to go 1.18
 
 ## Version 0.4.0
+
+### Features/Enhancements
 
 * Add support to property update to enable/disable liveness tests
 * Change .edgerc section default to 'default'
