@@ -18,11 +18,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	gtm "github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
-	akamai "github.com/akamai/cli-common-golang"
-	"github.com/urfave/cli"
 	"strconv"
 	"strings"
+
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/urfave/cli"
 )
 
 type arrayFlags struct {
@@ -54,7 +54,6 @@ func (i *arrayFlags) Get(indx int) int {
 	if indx < len(i.flagList) {
 		val = i.flagList[indx]
 	}
-	// TODO: Add some definition to error ...
 	return val
 }
 
@@ -111,13 +110,15 @@ func (t *TargetFlags) Set(value string) error {
 	if err := json.Unmarshal([]byte(value), &target); err != nil {
 		return err
 	}
-	targetFlags.targetList[target.DatacenterId] = ""
+	//Extra DEBUG
+	//fmt.Printf("DEBUG: unmarshaled target: %+v\n", target)
+	targetFlags.targetList[target.DatacenterID] = ""
 	for _, v := range t.targets {
-		if v.DatacenterId == target.DatacenterId {
+		if v.DatacenterID == target.DatacenterID {
 			if v.Enabled == target.Enabled && v.Weight == target.Weight {
 				return nil
 			}
-			return fmt.Errorf("Target %d already specified with different values", target.DatacenterId)
+			return fmt.Errorf("Target %d already specified with different values", target.DatacenterID)
 		}
 	}
 	targetFlags.targets = append(targetFlags.targets, target)
@@ -135,7 +136,7 @@ func parseBoolString(val string) (bool, error) {
 	return true, errors.New("Invalid value provided. Acceptable values: true, false")
 }
 
-var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
+func GetCommands() []cli.Command {
 	var commands []cli.Command
 
 	commands = append(commands, cli.Command{
@@ -179,7 +180,6 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Usage: "Return planned datacenter traffic target change(s).",
 			},
 		},
-		BashComplete: akamai.DefaultAutoComplete,
 	})
 
 	commands = append(commands, cli.Command{
@@ -240,7 +240,6 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Usage: "Return planned property change(s).",
 			},
 		},
-		BashComplete: akamai.DefaultAutoComplete,
 	})
 
 	commands = append(commands, cli.Command{
@@ -267,10 +266,9 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 				Usage: "Return status in JSON format.",
 			},
 		},
-		BashComplete: akamai.DefaultAutoComplete,
 	})
 
-	commands = append(commands,
+	/*commands = append(commands,
 		cli.Command{
 			Name:        "list",
 			Description: "List commands",
@@ -283,7 +281,7 @@ var commandLocator akamai.CommandLocator = func() ([]cli.Command, error) {
 			Action:       akamai.CmdHelp,
 			BashComplete: akamai.DefaultAutoComplete,
 		},
-	)
+	)*/
 
-	return commands, nil
+	return commands
 }

@@ -20,7 +20,7 @@ for your system, or by cloning this repository and compiling it yourself.
 
 ### Compiling from Source
 
-If you want to compile it from source, you will need Go 1.18 or later:
+If you want to compile it from source, you will need Go 1.23 or later:
 
 1. Create a clone of the target repository:  
   `git clone https://github.com/akamai/cli-gtm.git`
@@ -51,7 +51,7 @@ Built-In Commands:
 ### update-datacenter
 
 ```
-$ akamai gtm update-datacenter -help
+$ akamai gtm update-datacenter --help
 Name:
    akamai-gtm update-datacenter
 
@@ -75,7 +75,7 @@ Flags:
 ### update-property
 
 ```
-$ akamai gtm update-property -help
+$ akamai gtm update-property --help
 Name:
    akamai-gtm update-property
 
@@ -114,7 +114,7 @@ Property targets may be modified or added to properties by using the `target` ar
 ### query-status
 
 ```
-$ akamai gtm query-status -help
+$ akamai gtm query-status --help
 Name:
    akamai-gtm query-status
 
@@ -164,7 +164,7 @@ $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 -
 To modify (3131) and add (3134) property traffic targets:
 
 ```
-$ akamai gtm update-property test_property.com.akadns.net targettest --dryrun -target '{"datacenterId": 3131,"weight":30,"enabled":true,"servers":["1.5.6.7"]}' -target '{"datacenterId": 3134,"weight":30,"enabled":true,"servers":["1.5.6.8"]}'
+$ akamai gtm update-property test_property.com.akadns.net targettest --dryrun --target '{"datacenterId": 3131,"weight":30,"enabled":true,"servers":["1.5.6.7"]}' --target '{"datacenterId": 3134,"weight":30,"enabled":true,"servers":["1.5.6.8"]}'
 ```
 
 Note: On Windows platforms, use double quotes to enclose the target JSON string and escape the double quotes within the JSON. E.g.

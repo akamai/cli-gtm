@@ -15,17 +15,19 @@
 package main
 
 import (
+	"cli-gtm/edgegrid"
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
-	akamai "github.com/akamai/cli-common-golang"
-	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/fatih/color"
+	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
 )
 
 const defaultInterval int = 5
@@ -43,13 +45,17 @@ func cmdUpdateProperty(c *cli.Context) error {
 	var pComplete bool = false
 	var pTimeout int = defaultTimeout
 	var pDryrun bool = false
-	config, err := akamai.GetEdgegridConfig(c)
+
+	// Initialize Edgegrid session and context
+	ctx := context.Background()
+	sess, err := edgegrid.InitializeSession(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("session failed: %w", err)
 	}
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
 
-	configgtm.Init(config)
-
+	// Ensure domain and property name are provided
 	if c.NArg() < 2 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("domain and property are required"), 1)
@@ -91,7 +97,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		return cli.NewExitError(color.RedString("datacenter(s), target(s) and/or liveness_test(s)s must be specified"), 1)
 	}
 	// if nicknames specified, add to dcFlags
-	err = ParseNicknames(pDatacenters.nicknamesList, domainName)
+	err = ParseNicknames(c, pDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
 			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
@@ -126,9 +132,14 @@ func cmdUpdateProperty(c *cli.Context) error {
 		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
 	}
 
-	property, err := configgtm.GetProperty(propertyName, domainName)
+	req := gtm.GetPropertyRequest{
+		DomainName:   domainName,
+		PropertyName: propertyName,
+	}
+
+	property, err := gtmClient.GetProperty(ctx, req)
 	if err != nil {
-		return cli.NewExitError(color.RedString("Property not found"), 1)
+		return cli.NewExitError(color.RedString("Property not found: "+err.Error()), 1)
 	}
 
 	changes_made := false
@@ -138,14 +149,16 @@ func cmdUpdateProperty(c *cli.Context) error {
 		fmt.Println(targetsmsg)
 	}
 	fmt.Sprintf(targetsmsg)
-	akamai.StartSpinner("Updating Traffic Targets ", "")
+	fmt.Println("Updating Traffic Targets ", "")
 	var propTargets = map[int]string{}
-	for _, traffTarg := range trafficTargets {
-		// Al traffic target fields can be updated via target.
+	//for _, traffTarg := range trafficTargets {
+	for i := range property.TrafficTargets {
+		traffTarg := &property.TrafficTargets[i]
+		// All traffic target fields can be updated via target.
 		if c.IsSet("target") {
 			for _, targ := range pTargets.targets {
-				propTargets[traffTarg.DatacenterId] = ""
-				if traffTarg.DatacenterId == targ.DatacenterId {
+				propTargets[traffTarg.DatacenterID] = ""
+				if traffTarg.DatacenterID == targ.DatacenterID {
 					// required
 					if traffTarg.Weight != targ.Weight {
 						traffTarg.Weight = targ.Weight
@@ -187,7 +200,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		}
 
 		for _, dcID := range pDatacenters.flagList {
-			if traffTarg.DatacenterId == dcID {
+			if traffTarg.DatacenterID == dcID {
 				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
 					traffTarg.Enabled = pEnabled
@@ -212,8 +225,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 			if _, ok := propTargets[cmdTarget]; !ok {
 				// New target. Find it
 				for _, t := range pTargets.targets {
-					if t.DatacenterId == cmdTarget {
-						property.TrafficTargets = append(property.TrafficTargets, &t)
+					if t.DatacenterID == cmdTarget {
+						property.TrafficTargets = append(property.TrafficTargets, t)
 						changes_made = true
 						break
 					}
@@ -226,7 +239,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if len(pLivenessTests) > 0 {
 		testList := strings.Join(pLivenessTests, " ")
 		fmt.Println("livesness tests: ", testList)
-		for _, test := range property.LivenessTests {
+		/*for _, test := range property.LivenessTests {
 			fmt.Println("Processing livesness test: ", test.Name)
 			if strings.Contains(testList, test.Name) {
 				fmt.Println("Livesness test match!")
@@ -238,7 +251,23 @@ func cmdUpdateProperty(c *cli.Context) error {
 					changes_made = true
 				}
 			}
+		}*/
+		for i := range property.LivenessTests {
+			test := &property.LivenessTests[i]
+			fmt.Println("Processing liveness test: ", test.Name)
+			for _, lt := range pLivenessTests {
+				if strings.EqualFold(strings.TrimSpace(test.Name), strings.TrimSpace(lt)) {
+					fmt.Println("Liveness test match!")
+					fmt.Println("pEnabled: ", pEnabled)
+					fmt.Println("test.Disabled: ", test.Disabled)
+					if (c.IsSet("enable") || c.IsSet("disable")) && test.Disabled != !pEnabled {
+						test.Disabled = !pEnabled
+						changes_made = true
+					}
+				}
+			}
 		}
+
 	}
 
 	if changes_made {
@@ -251,69 +280,100 @@ func cmdUpdateProperty(c *cli.Context) error {
 			fmt.Fprintln(c.App.Writer, "Proposed Property Update")
 			fmt.Fprintln(c.App.Writer, string(json))
 
-			if !c.IsSet("json") {
-				akamai.StopSpinnerOk()
-			}
+			/*if !c.IsSet("json") {
+				fmt.Println("--json flag not set") // Extra
+			}*/
 
 			return nil
 		}
 
-		propStat, err := property.Update(domainName)
+		propPtr := (*gtm.Property)(property)
+
+		updateReq := gtm.UpdatePropertyRequest{
+			DomainName: domainName,
+			Property:   propPtr, // the updated property data
+		}
+
+		propStat, err := gtmClient.UpdateProperty(ctx, updateReq)
 		if err != nil {
-			akamai.StopSpinnerFail()
 			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
 		}
-		if !c.IsSet("json") {
-			akamai.StopSpinnerOk()
+
+		//Extra -- for testing
+		/*updatedProperty, err := gtmClient.GetProperty(ctx, gtm.GetPropertyRequest{
+			DomainName:   domainName,
+			PropertyName: propertyName,
+		})
+		if err != nil {
+			return cli.NewExitError(color.RedString("Failed to fetch updated property: "+err.Error()), 1)
 		}
+
+		jsonUpdated, err := json.MarshalIndent(updatedProperty, "", "  ")
+		if err != nil {
+			return cli.NewExitError(color.RedString("Failed to marshal updated property: "+err.Error()), 1)
+		}
+
+		fmt.Fprintln(c.App.Writer, "\nUpdated Property Payload:")
+		fmt.Fprintln(c.App.Writer, string(jsonUpdated))*/
+		// end test
+
+		/*if !c.IsSet("json") {
+			fmt.Println("--json flag not set") //Extra
+		}*/
 		// wait to complete?
-		if pComplete && propStat.PropagationStatus == "PENDING" {
-			var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
-			var sleepTimeout time.Duration = 1  // seconds. TODO: Should be configurable by user ...
-			sleepInterval *= time.Duration(defaultInterval)
-			sleepTimeout *= time.Duration(pTimeout)
+		if pComplete && propStat.Status.PropagationStatus == "PENDING" {
+			sleepInterval := time.Duration(defaultInterval) * time.Second
+			sleepTimeout := time.Duration(pTimeout) * time.Second
+
 			if !c.IsSet("json") {
-				fmt.Println(" ")
-				akamai.StartSpinner("Waiting for completion ", "")
+				fmt.Println("\nWaiting for completion...")
 			}
+
 			for {
-				time.Sleep(sleepInterval * time.Second)
+				time.Sleep(sleepInterval)
 				sleepTimeout -= sleepInterval
-				if propStat.PropagationStatus == "COMPLETE" {
+
+				if propStat.Status.PropagationStatus == "COMPLETE" {
 					if !c.IsSet("json") {
-						akamai.StopSpinner("[Change deployed]", true)
+						fmt.Println("[Change deployed]")
 					}
 					break
-				} else if propStat.PropagationStatus == "DENIED" {
+				} else if propStat.Status.PropagationStatus == "DENIED" {
 					if !c.IsSet("json") {
-						akamai.StopSpinner("[Change denied]", true)
+						fmt.Println("[Change denied]")
 					}
 					break
 				}
+
 				if sleepTimeout <= 0 {
 					if !c.IsSet("json") {
-						akamai.StopSpinner("[Maximum wait time elapsed. Use query-status confirm successful deployment]", true)
+						fmt.Println("[Maximum wait time elapsed. Use query-status to confirm successful deployment]")
 					}
 					break
 				}
-				propStat, err = configgtm.GetDomainStatus(domainName)
+
+				domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 				if err != nil {
 					if !c.IsSet("json") {
-						akamai.StopSpinner("[Unable to retrieve domain status]", true)
+						fmt.Println("[Unable to retrieve domain status]")
 					}
 					break
 				}
+
+				// domainStatus is a ResponseStatus type, so update propStat.Status
+				propStat.Status = (*gtm.ResponseStatus)(domainStatus)
 			}
 		}
+
 		if c.IsSet("json") {
 			fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
 		}
-		var status interface{}
+		/*var status interface{}
 
 		if c.IsSet("verbose") && verboseStatus {
 			status = propStat
 		} else {
-			status = fmt.Sprintf("ChangeId: %s", propStat.ChangeId)
+			status = fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID)
 		}
 
 		if c.IsSet("json") && c.Bool("json") {
@@ -325,16 +385,37 @@ func cmdUpdateProperty(c *cli.Context) error {
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			if c.IsSet("verbose") && verboseStatus {
-				fmt.Fprintln(c.App.Writer, renderStatus(status.(*configgtm.ResponseStatus), c))
+				fmt.Fprintln(c.App.Writer, renderStatus(status.(gtm.ResponseStatus), c))
 			} else {
 				fmt.Fprintln(c.App.Writer, "Response Status")
 				fmt.Fprintln(c.App.Writer, " ")
 				fmt.Fprintln(c.App.Writer, status)
 			}
+		}*/
+		if c.IsSet("json") && c.Bool("json") {
+			var jsonStatus interface{}
+			if c.IsSet("verbose") && verboseStatus {
+				jsonStatus = propStat
+			} else {
+				jsonStatus = fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID)
+			}
+			jsonOut, err := json.MarshalIndent(jsonStatus, "", "  ")
+			if err != nil {
+				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+			}
+			fmt.Fprintln(c.App.Writer, string(jsonOut))
+		} else {
+			fmt.Fprintln(c.App.Writer, "")
+			if c.IsSet("verbose") && verboseStatus {
+				fmt.Fprintln(c.App.Writer, renderStatus(*propStat.Status, c))
+			} else {
+				fmt.Fprintln(c.App.Writer, "Response Status")
+				fmt.Fprintln(c.App.Writer, " ")
+				fmt.Fprintln(c.App.Writer, fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID))
+			}
 		}
 	} else {
 		if !c.IsSet("json") {
-			akamai.StopSpinnerOk()
 			fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
 		}
 	}
@@ -344,7 +425,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 }
 
 // Pretty print output
-func renderStatus(status *configgtm.ResponseStatus, c *cli.Context) string {
+func renderStatus(status gtm.ResponseStatus, c *cli.Context) string {
 
 	var outString string
 	outString += fmt.Sprintln(" ")
@@ -363,7 +444,7 @@ func renderStatus(status *configgtm.ResponseStatus, c *cli.Context) string {
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
-	rowData := []string{"ChangeId", status.ChangeId}
+	rowData := []string{"ChangeId", status.ChangeID}
 	table.Append(rowData)
 	rowData = []string{"Message", status.Message}
 	table.Append(rowData)

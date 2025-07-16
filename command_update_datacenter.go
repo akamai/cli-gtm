@@ -15,16 +15,18 @@
 package main
 
 import (
+	"cli-gtm/edgegrid"
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
-	akamai "github.com/akamai/cli-common-golang"
-	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/fatih/color"
+	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
 )
 
 var dcTimeout int = defaultTimeout
@@ -41,22 +43,26 @@ var dryrunArray []string
 // worker function for update-datacenter
 func cmdUpdateDatacenter(c *cli.Context) error {
 
-	config, err := akamai.GetEdgegridConfig(c)
+	//Initialize Edgegrid session and context
+	ctx := context.Background()
+	sess, err := edgegrid.InitializeSession(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("session failed %v", err)
 	}
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
 
-	configgtm.Init(config)
-
+	// Validate domain name
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("domain name is required"), 1)
 	}
 
+	// Get domain name and CLI flags
 	domainName := c.Args().First()
 	dcDatacenters = c.Generic("datacenter").(*arrayFlags)
 	if c.IsSet("enable") && c.IsSet("disable") {
-		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+		return cli.NewExitError(color.RedString("must specify either enable or disable."), 1)
 	} else if c.IsSet("enable") {
 		dcEnabled = true
 	} else if c.IsSet("disable") {
@@ -75,178 +81,137 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		dcTimeout = c.Int("timeout")
 	}
 
-	// if nicknames specified, add to dcFlags
-	err = ParseNicknames(dcDatacenters.nicknamesList, domainName)
-	if err != nil {
+	// Resolve nicknames to datacenter Ids
+	if err := ParseNicknames(c, dcDatacenters.nicknamesList, domainName); err != nil {
+		msg := "Unable to retrieve datacenter."
 		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
-		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+			msg += " " + err.Error()
 		}
+		return cli.NewExitError(color.RedString(msg), 1)
 	}
-	if !c.IsSet("datacenter") || len(dcDatacenters.flagList) == 0 {
+	if len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
 		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
 	}
 
 	if !c.IsSet("json") {
-		fmt.Println(fmt.Sprintf("Updating Datacenter(s) in domain %s ", domainName))
+		fmt.Printf("Updating Datacenter(s) in domain %s\n", domainName)
 	}
 
-	dom, err := configgtm.GetDomain(domainName)
+	// 1. List all properties in given domain
+	properties, err := gtmClient.ListProperties(ctx, gtm.ListPropertiesRequest{DomainName: domainName})
 	if err != nil {
-		return cli.NewExitError(color.RedString("Domain "+domainName+" not found "), 1)
+		return cli.NewExitError(color.RedString("Unable to list properties: "+err.Error()), 1)
 	}
-	properties := dom.Properties
-	propmsg := fmt.Sprintf("%s contains %s properties", domainName, strconv.Itoa(len(properties)))
+	propmsg := fmt.Sprintf("%s contains %d properties", domainName, len(properties))
 	if !c.IsSet("json") {
 		fmt.Println(propmsg)
 	}
-	for _, propPtr := range properties {
-		changes_made := false
+
+	// 2. Iterate each property & apply changes
+	for _, prop := range properties {
+		changesMade := false
 		if !c.IsSet("json") {
-			akamai.StartSpinner(fmt.Sprintf("Updating Property: %s", propPtr.Name), "")
+			fmt.Printf("Updating Property: %s\n", prop.Name)
 		}
-		trafficTargets := propPtr.TrafficTargets
-		targetsmsg := fmt.Sprintf("%s contains %s targets", propPtr.Name, strconv.Itoa(len(trafficTargets)))
+		targetsmsg := fmt.Sprintf("%s contains %d targets", prop.Name, len(prop.TrafficTargets))
 		if !c.IsSet("json") {
 			fmt.Println(targetsmsg)
 		}
-		fmt.Sprintf(targetsmsg)
-		for _, traffTarg := range trafficTargets {
-			dcs := dcDatacenters
-			for _, dcID := range dcs.flagList {
-				if traffTarg.DatacenterId == dcID && (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != dcEnabled {
-					fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
-					traffTarg.Enabled = dcEnabled
-					changes_made = true
+
+		for i, tt := range prop.TrafficTargets {
+			for _, dcID := range dcDatacenters.flagList {
+				if tt.DatacenterID == dcID && (!tt.Enabled && dcEnabled || tt.Enabled && !dcEnabled) {
+					prop.TrafficTargets[i].Enabled = dcEnabled
+					changesMade = true
 				}
 			}
 		}
-		if changes_made {
+
+		// If changes were made, apply them or record in dry-run
+		if changesMade {
 			if dcDryrun {
-				json, err := json.MarshalIndent(propPtr, "", "  ")
+				b, err := json.MarshalIndent(prop, "", "  ")
 				if err != nil {
-					propError := &FailUpdate{PropName: propPtr.Name, FailMsg: err.Error()}
-					failedArray = append(failedArray, propError)
+					failedArray = append(failedArray, &FailUpdate{PropName: prop.Name, FailMsg: err.Error()})
 				} else {
-					dryrunArray = append(dryrunArray, string(json))
-				}
-				if !c.IsSet("json") {
-					akamai.StopSpinnerOk()
+					dryrunArray = append(dryrunArray, string(b))
 				}
 				continue
 			}
 
-			stat, err := propPtr.Update(domainName)
+			resp, err := gtmClient.UpdateProperty(ctx, gtm.UpdatePropertyRequest{
+				DomainName: domainName, Property: &prop,
+			})
 			if err != nil {
-				propError := &FailUpdate{PropName: propPtr.Name, FailMsg: err.Error()}
-				failedArray = append(failedArray, propError)
+				failedArray = append(failedArray, &FailUpdate{PropName: prop.Name, FailMsg: err.Error()})
 			} else {
 				if c.IsSet("verbose") && verboseStatus {
-					verbStat := &SuccUpdateVerbose{PropName: propPtr.Name, RespStat: stat}
-					succVerboseArray = append(succVerboseArray, verbStat)
+					succVerboseArray = append(succVerboseArray, &SuccUpdateVerbose{PropName: prop.Name, RespStat: resp.Status})
 				} else {
-					shortStat := &SuccUpdateShort{PropName: propPtr.Name, ChangeId: stat.ChangeId}
-					succShortArray = append(succShortArray, shortStat)
+					succShortArray = append(succShortArray, &SuccUpdateShort{PropName: prop.Name, ChangeId: resp.Status.ChangeID})
 				}
 			}
 		}
-		if !c.IsSet("json") {
-			akamai.StopSpinnerOk()
-		}
 	}
 
-	if dcComplete && (len(succVerboseArray) > 0 || len(succShortArray) > 0) {
-		var sleepInterval time.Duration = 1 // seconds. TODO:Should be configurable by user ...
-		var sleepTimeout time.Duration = 1  // seconds. TODO: Should be configurable by user ...
-		sleepInterval *= time.Duration(defaultInterval)
-		sleepTimeout *= time.Duration(dcTimeout)
+	// 3. Wait for propagation if requested
+	if dcComplete && (len(succShortArray)+len(succVerboseArray) > 0) {
+		timeout := time.Duration(dcTimeout) * time.Second
+		interval := time.Duration(defaultInterval) * time.Second
 		if !c.IsSet("json") {
-			akamai.StartSpinner("Waiting for completion ", "")
+			fmt.Println("Waiting for completion...")
 		}
-		for {
-			dStat, err := configgtm.GetDomainStatus(domainName)
+		for timeout > 0 {
+			domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 			if err != nil {
-				if !c.IsSet("json") {
-					akamai.StopSpinner(" [Unable to retrieve domain status.]", true)
-				}
+				fmt.Printf("Error getting domain status: %v\n", err)
 				break
 			}
-			time.Sleep(sleepInterval * time.Second)
-			sleepTimeout -= sleepInterval
-			if dStat.PropagationStatus == "COMPLETE" {
-				if !c.IsSet("json") {
-					akamai.StopSpinner(" [Change deployed]", true)
-				}
-				break
-			} else if dStat.PropagationStatus == "DENIED" {
-				if !c.IsSet("json") {
-					akamai.StopSpinner(" [Change denied]", true)
-				}
+			if domainStatus.PropagationStatus == "COMPLETE" || domainStatus.PropagationStatus == "DENIED" {
 				break
 			}
-			if sleepTimeout <= 0 {
-				if !c.IsSet("json") {
-					akamai.StopSpinner(" [Maximum wait time elapsed. Use query-status confirm successful deployment]", true)
-				}
-				break
-			}
+			time.Sleep(interval)
+			timeout -= interval
 		}
 	}
 
-	if len(properties) == 1 && len(failedArray) > 0 {
-		return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s: %s", failedArray[0].PropName, failedArray[0].FailMsg)), 1)
-	}
-
+	// 4. Prepare summary & output
 	updateSum := UpdateSummary{}
 	if dcDryrun {
 		updateSum.Updated_Properties = dryrunArray
 		updateSum.Failed_Updates = failedArray
-		json, err := json.MarshalIndent(updateSum, "", "  ")
-		if err != nil {
-			return cli.NewExitError(color.RedString("Unable to display dryrun results"), 1)
-		}
-		fmt.Fprintln(c.App.Writer, string(json))
+		b, _ := json.MarshalIndent(updateSum, "", "  ")
+		fmt.Fprintln(c.App.Writer, string(b))
 		return nil
 	}
-
-	if c.IsSet("verbose") && verboseStatus && len(succVerboseArray) > 0 {
+	if len(succVerboseArray) > 0 {
 		updateSum.Updated_Properties = succVerboseArray
 	} else if len(succShortArray) > 0 {
 		updateSum.Updated_Properties = succShortArray
 	}
-	if len(failedArray) > 0 {
-		updateSum.Failed_Updates = failedArray
-	}
+	updateSum.Failed_Updates = failedArray
 
-	if updateSum.Failed_Updates == nil && updateSum.Updated_Properties == nil {
+	// Output summary in JSON or table format
+	if updateSum.Updated_Properties == nil && updateSum.Failed_Updates == nil {
 		if !c.IsSet("json") {
 			fmt.Fprintln(c.App.Writer, "No property updates were needed.")
 		}
+	} else if c.IsSet("json") {
+		b, _ := json.MarshalIndent(updateSum, "", "  ")
+		fmt.Fprintln(c.App.Writer, string(b))
 	} else {
-		if c.IsSet("json") && c.Bool("json") {
-			json, err := json.MarshalIndent(updateSum, "", "  ")
-			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
-			}
-			fmt.Fprintln(c.App.Writer, string(json))
-		} else {
-			fmt.Fprintln(c.App.Writer, "")
-			fmt.Fprintln(c.App.Writer, renderDCStatus(updateSum, c))
-		}
+		fmt.Fprintln(c.App.Writer, "\n"+renderDCStatus(updateSum, c))
 	}
 
 	return nil
-
 }
 
+// Renders datacenter update summary in table format
 func renderDCStatus(upSum UpdateSummary, c *cli.Context) string {
+	var outString strings.Builder
+	outString.WriteString("\nDatacenter Update Summary\n\n")
 
-	var outString string
-	outString += fmt.Sprintln(" ")
-	outString += fmt.Sprintln("Datacenter Update Summary")
-	outString += fmt.Sprintln(" ")
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
 
@@ -256,57 +221,48 @@ func renderDCStatus(upSum UpdateSummary, c *cli.Context) string {
 	table.SetRowSeparator(" ")
 	table.SetBorder(false)
 	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
+	})
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
-	// Build summary table. Exclude Links in status.
-	rowData := []string{"Completed Updates", " ", " ", " "}
-	table.Append(rowData)
+	// Completed Updates
+	table.Append([]string{"Completed Updates", " ", " ", " "})
+
 	if c.IsSet("verbose") && verboseStatus {
 		if len(succVerboseArray) == 0 {
-			rowData := []string{" ", "No successful updates", " ", " "}
-			table.Append(rowData)
+			table.Append([]string{" ", "No successful updates", " ", " "})
 		} else {
 			for _, prop := range succVerboseArray {
-				rowData := []string{" ", prop.PropName, "ChangeId", prop.RespStat.ChangeId}
-				table.Append(rowData)
-				rowData = []string{" ", " ", "Message", prop.RespStat.Message}
-				table.Append(rowData)
-				rowData = []string{" ", " ", "Passing Validation", strconv.FormatBool(prop.RespStat.PassingValidation)}
-				table.Append(rowData)
-				rowData = []string{" ", " ", "Propagation Status", prop.RespStat.PropagationStatus}
-				table.Append(rowData)
-				rowData = []string{" ", " ", "Propagation Status Date", prop.RespStat.PropagationStatusDate}
-				table.Append(rowData)
+				table.Append([]string{" ", prop.PropName, "ChangeId", prop.RespStat.ChangeID})
+				table.Append([]string{" ", " ", "Message", prop.RespStat.Message})
+				table.Append([]string{" ", " ", "Passing Validation", strconv.FormatBool(prop.RespStat.PassingValidation)})
+				table.Append([]string{" ", " ", "Propagation Status", prop.RespStat.PropagationStatus})
+				table.Append([]string{" ", " ", "Propagation Status Date", prop.RespStat.PropagationStatusDate})
 			}
 		}
 	} else {
 		if len(succShortArray) == 0 {
-			rowData := []string{" ", "No successful updates", " ", " "}
-			table.Append(rowData)
+			table.Append([]string{" ", "No successful updates", " ", " "})
 		} else {
 			for _, prop := range succShortArray {
-				rowData := []string{" ", prop.PropName, "ChangeId", prop.ChangeId}
-				table.Append(rowData)
+				table.Append([]string{" ", prop.PropName, "ChangeId", prop.ChangeId})
 			}
 		}
 	}
 
-	rowData = []string{"Failed Updates", " ", " ", " "}
-	table.Append(rowData)
+	// Failed Updates
+	table.Append([]string{"Failed Updates", " ", " ", " "})
 	if len(failedArray) == 0 {
-		rowData := []string{" ", "No failed property updates", " ", " "}
-		table.Append(rowData)
+		table.Append([]string{" ", "No failed property updates", " ", " "})
 	} else {
 		for _, prop := range failedArray {
-			rowData := []string{" ", prop.PropName, "Failure Message", prop.FailMsg}
-			table.Append(rowData)
+			table.Append([]string{" ", prop.PropName, "Failure Message", prop.FailMsg})
 		}
 	}
 
 	table.Render()
-	outString += fmt.Sprintln(tableString.String())
-
-	return outString
-
+	outString.WriteString(tableString.String())
+	return outString.String()
 }

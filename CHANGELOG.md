@@ -1,5 +1,17 @@
 # Release Notes
 
+## Version 0.6.0 (July 2025)
+
+### Features/Enhancements
+
+* Upgrade to Edgegrid v11.0.0
+* Session based authentication
+* Migrate to go 1.23
+* Added - reportsgtm package
+    - Provides traffic reporting for individual datacenters within a GTM domain
+    - Supports property-level traffic reports, including data across multiple datacenters
+    - Enables retrieval of IP availability for GTM properties
+
 ## Version 0.5.0 (May 10, 2023)
 
 ### Features/Enhancements
