@@ -108,7 +108,6 @@ Property targets may be modified or added to properties by using the `target` ar
 * weight: float64 - Required
 * enabled: bool - Required
 * servers: string list - Optional
-* name: string - Optional
 * handoutCName: string - Optional
 
 ### query-status
