@@ -1,5 +1,13 @@
 # Release Notes
 
+## Version 0.7.0 (January 19, 2026)
+
+### Features/Enhancements
+
+* Add support for linux-arm64 architecture
+* Upgrade to Edgegrid v12.2.0 
+* Migrate to go 1.25.6
+
 ## Version 0.6.0 (July 2025)
 
 ### Features/Enhancements
