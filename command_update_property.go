@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -239,19 +239,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if len(pLivenessTests) > 0 {
 		testList := strings.Join(pLivenessTests, " ")
 		fmt.Println("livesness tests: ", testList)
-		/*for _, test := range property.LivenessTests {
-			fmt.Println("Processing livesness test: ", test.Name)
-			if strings.Contains(testList, test.Name) {
-				fmt.Println("Livesness test match!")
-				fmt.Println("pEnabled: ", pEnabled)
-				fmt.Println("test.Disabled: ", test.Disabled)
-				if (c.IsSet("enable") || c.IsSet("disable")) && test.Disabled != !pEnabled {
-					// logic is reversed.
-					test.Disabled = !pEnabled
-					changes_made = true
-				}
-			}
-		}*/
 		for i := range property.LivenessTests {
 			test := &property.LivenessTests[i]
 			fmt.Println("Processing liveness test: ", test.Name)
@@ -299,28 +286,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
 		}
 
-		//Extra -- for testing
-		/*updatedProperty, err := gtmClient.GetProperty(ctx, gtm.GetPropertyRequest{
-			DomainName:   domainName,
-			PropertyName: propertyName,
-		})
-		if err != nil {
-			return cli.NewExitError(color.RedString("Failed to fetch updated property: "+err.Error()), 1)
-		}
-
-		jsonUpdated, err := json.MarshalIndent(updatedProperty, "", "  ")
-		if err != nil {
-			return cli.NewExitError(color.RedString("Failed to marshal updated property: "+err.Error()), 1)
-		}
-
-		fmt.Fprintln(c.App.Writer, "\nUpdated Property Payload:")
-		fmt.Fprintln(c.App.Writer, string(jsonUpdated))*/
-		// end test
-
-		/*if !c.IsSet("json") {
-			fmt.Println("--json flag not set") //Extra
-		}*/
-		// wait to complete?
 		if pComplete && propStat.Status.PropagationStatus == "PENDING" {
 			sleepInterval := time.Duration(defaultInterval) * time.Second
 			sleepTimeout := time.Duration(pTimeout) * time.Second
@@ -368,30 +333,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		if c.IsSet("json") {
 			fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
 		}
-		/*var status interface{}
 
-		if c.IsSet("verbose") && verboseStatus {
-			status = propStat
-		} else {
-			status = fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID)
-		}
-
-		if c.IsSet("json") && c.Bool("json") {
-			json, err := json.MarshalIndent(status, "", "  ")
-			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
-			}
-			fmt.Fprintln(c.App.Writer, string(json))
-		} else {
-			fmt.Fprintln(c.App.Writer, "")
-			if c.IsSet("verbose") && verboseStatus {
-				fmt.Fprintln(c.App.Writer, renderStatus(status.(gtm.ResponseStatus), c))
-			} else {
-				fmt.Fprintln(c.App.Writer, "Response Status")
-				fmt.Fprintln(c.App.Writer, " ")
-				fmt.Fprintln(c.App.Writer, status)
-			}
-		}*/
 		if c.IsSet("json") && c.Bool("json") {
 			var jsonStatus interface{}
 			if c.IsSet("verbose") && verboseStatus {
