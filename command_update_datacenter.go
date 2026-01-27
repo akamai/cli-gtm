@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -38,7 +38,7 @@ var dcDatacenters *arrayFlags
 var succShortArray []*SuccUpdateShort
 var succVerboseArray []*SuccUpdateVerbose
 var failedArray []*FailUpdate
-var dryrunArray []string
+var dryrunArray []json.RawMessage
 
 // worker function for update-datacenter
 func cmdUpdateDatacenter(c *cli.Context) error {
@@ -135,7 +135,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				if err != nil {
 					failedArray = append(failedArray, &FailUpdate{PropName: prop.Name, FailMsg: err.Error()})
 				} else {
-					dryrunArray = append(dryrunArray, string(b))
+					dryrunArray = append(dryrunArray, json.RawMessage(b))
 				}
 				continue
 			}

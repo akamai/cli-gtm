@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v11/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
 	"github.com/urfave/cli"
 )
 
@@ -267,21 +267,6 @@ func GetCommands() []cli.Command {
 			},
 		},
 	})
-
-	/*commands = append(commands,
-		cli.Command{
-			Name:        "list",
-			Description: "List commands",
-			Action:      akamai.CmdList,
-		},
-		cli.Command{
-			Name:         "help",
-			Description:  "Displays help information",
-			ArgsUsage:    "[command] [sub-command]",
-			Action:       akamai.CmdHelp,
-			BashComplete: akamai.DefaultAutoComplete,
-		},
-	)*/
 
 	return commands
 }
