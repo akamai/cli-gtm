@@ -15,8 +15,13 @@
 package main
 
 import (
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
+	"cli-gtm/edgegrid"
+	"context"
+	"fmt"
 	"strconv"
+
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/urfave/cli"
 )
 
 // SuccUpdateShort is the success status structure for no verbose status updates
@@ -28,7 +33,7 @@ type SuccUpdateShort struct {
 // SuccUpdateVerbose is the success status structure for verbose status updates
 type SuccUpdateVerbose struct {
 	PropName string
-	RespStat *configgtm.ResponseStatus
+	RespStat *gtm.ResponseStatus
 }
 
 // FailUpdate is the failure status structure for no verbose status updates
@@ -46,11 +51,21 @@ type UpdateSummary struct {
 var verboseStatus bool = false
 
 // ParseNicknames parses any nicknames provided and adds to dcFlags
-func ParseNicknames(nicknames []string, domain string) error {
+func ParseNicknames(c *cli.Context, nicknames []string, domain string) error {
+
+	ctx := context.Background()
+	sess, err := edgegrid.InitializeSession(c)
+	if err != nil {
+		return fmt.Errorf("session failed %v", err)
+	}
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
 
 	if len(nicknames) > 0 {
 		// get list of data centers
-		dcList, err := configgtm.ListDatacenters(domain)
+		req := gtm.ListDatacentersRequest{DomainName: domain}
+
+		dcList, err := gtmClient.ListDatacenters(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -58,7 +73,7 @@ func ParseNicknames(nicknames []string, domain string) error {
 		for _, dc := range dcList {
 			for _, nn := range nicknames {
 				if dc.Nickname == nn {
-					dcFlags.Set(strconv.Itoa(dc.DatacenterId))
+					dcFlags.Set(strconv.Itoa(dc.DatacenterID))
 				}
 			}
 		}

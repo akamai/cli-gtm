@@ -15,15 +15,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/configgtm-v1_4"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/reportsgtm-v1"
-	akamai "github.com/akamai/cli-common-golang"
+	"cli-gtm/edgegrid"
+	"cli-gtm/reportsgtm"
+
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/session"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -93,36 +97,49 @@ type PropertyDCStatus struct {
 
 var defaultPeriod time.Duration = 15 * 60 * 1000 * 1000
 
-// Calc period start and end. Input string specifying duration, e.g. 15m. Returns formatted strings consumable by GTM Reports API.
-func calcPeriodStartandEnd(trafficType string, periodLen string) (string, string, error) {
+type SessionAdapter struct {
+	s session.Session
+}
 
+func (a *SessionAdapter) Exec(req *http.Request, v interface{}) (*http.Response, error) {
+	// This matches edgegrid.Session's Exec method signature
+	return a.s.Exec(req, v)
+}
+
+// Calc period start and end. Input string specifying duration, e.g. 15m. Returns formatted strings consumable by GTM Reports API.
+func calcPeriodStartandEnd(c *cli.Context, trafficType, periodLen string) (string, string, error) {
 	dur, err := time.ParseDuration(periodLen)
 	if err != nil {
 		dur = defaultPeriod
 	}
 
-	var window *reportsgtm.WindowResponse
+	ctx := context.Background()
 
-	if trafficType == "datacenter" {
-		window, err = reportsgtm.GetDatacentersTrafficWindow()
-	} else if trafficType == "property" {
-		window, err = reportsgtm.GetPropertiesTrafficWindow()
-	} else {
-		// shouldn't get here. If so, return invalid date
-		err := configgtm.CommonError{}
-		err.SetItem("entityName", "Window")
-		err.SetItem("name", "Data Window")
-		err.SetItem("apiErrorMessage", "Traffic Type "+trafficType+" not supported")
-	}
+	sess, err := edgegrid.InitializeSession(c)
 	if err != nil {
-		// return invalid dates
 		return "", "", err
 	}
+	adaptedSess := &SessionAdapter{s: sess}
+
+	var window *reportsgtm.WindowResponse
+
+	switch trafficType {
+	case "datacenter":
+		window, err = reportsgtm.GetDatacentersTrafficWindow(ctx, adaptedSess)
+	case "property":
+		window, err = reportsgtm.GetPropertiesTrafficWindow(ctx, adaptedSess)
+	default:
+		return "", "", fmt.Errorf("trafficType %q not supported", trafficType)
+	}
+
+	if err != nil {
+		return "", "", err
+	}
+
 	end := window.EndTime
 	start := end.Add(-dur)
 
 	return start.Format(time.RFC3339), end.Format(time.RFC3339), nil
-
 }
 
 type trafficTargetEnabledStatus struct {
@@ -132,14 +149,14 @@ type trafficTargetEnabledStatus struct {
 }
 
 // Build DC Properties enabled Map
-func buildDCPropertiesEnabledMap(domain *configgtm.Domain, dcID int) map[string]*trafficTargetEnabledStatus {
+func buildDCPropertiesEnabledMap(domain *gtm.Domain, dcID int) map[string]*trafficTargetEnabledStatus {
 
 	propEnabledMap := make(map[string]*trafficTargetEnabledStatus)
 	for _, prop := range domain.Properties {
 		for _, tgt := range prop.TrafficTargets {
 			// collect enabled status
-			if tgt.DatacenterId == dcID {
-				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterId, ttEnabled: tgt.Enabled,
+			if tgt.DatacenterID == dcID {
+				ttMapEntry := &trafficTargetEnabledStatus{ttDCID: tgt.DatacenterID, ttEnabled: tgt.Enabled,
 					ttWeight: tgt.Weight}
 				propEnabledMap[prop.Name] = ttMapEntry
 			}
@@ -150,14 +167,14 @@ func buildDCPropertiesEnabledMap(domain *configgtm.Domain, dcID int) map[string]
 }
 
 // Build DC property List
-func buildDCPropertyList(domain *configgtm.Domain, dcID int) []EnhancedPropertyStatus {
+func buildDCPropertyList(domain *gtm.Domain, dcID int) []EnhancedPropertyStatus {
 
 	var dcPropList []EnhancedPropertyStatus
 	var dcProps []TimestampPropertyStatus
 	dcStat := EnhancedPropertyStatus{Timestamp: time.Now().Format(time.RFC3339)}
 	for _, propPtr := range domain.Properties {
 		for _, traffTarg := range propPtr.TrafficTargets {
-			if traffTarg.DatacenterId == dcID {
+			if traffTarg.DatacenterID == dcID {
 				dcTimedProp := TimestampPropertyStatus{}
 				dcTimedProp.Name = propPtr.Name
 				dcTimedProp.Requests = 0
@@ -175,29 +192,45 @@ func buildDCPropertyList(domain *configgtm.Domain, dcID int) []EnhancedPropertyS
 }
 
 // Retrieve a Datacenter
-func findDatacenterInDomain(domain *configgtm.Domain, dcID int) (*configgtm.Datacenter, bool) {
-
-	for _, dc := range domain.Datacenters {
-		if dcID == dc.DatacenterId {
-			return dc, true
+func findDatacenterInDomain(domain *gtm.Domain, dcID int) (*gtm.Datacenter, bool) {
+	for i := range domain.Datacenters {
+		if dcID == domain.Datacenters[i].DatacenterID {
+			return &domain.Datacenters[i], true
 		}
 	}
 	return nil, false
 }
 
 // Populate a list of empty DCStatusDetail structures
-func populateEmptyDCStatusList() ([]*DCStatusDetail, error) {
+func populateEmptyDCStatusList(c *cli.Context) ([]*DCStatusDetail, error) {
+	ctx := context.Background()
+
+	sess, err := edgegrid.InitializeSession(c)
+	if err != nil {
+		return nil, fmt.Errorf("session failed %v", err)
+	}
+
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
+
+	// Fetch domain object using gtmClient
+	domainResp, err := gtmClient.GetDomain(ctx, gtm.GetDomainRequest{DomainName: domainName})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get domain: %w", err)
+	}
+
+	// Extract the actual Domain from response
+	dom := (*gtm.Domain)(domainResp)
 
 	var dcStatDetailList []*DCStatusDetail
-	dom, err := configgtm.GetDomain(domainName)
-	if err != nil {
-		return dcStatDetailList, err
-	}
+
 	for _, dcID := range qsDatacenters.flagList {
-		dcEntry := &DCStatusDetail{DatacenterId: dcID} // Do we need the nickname also?
+		dcEntry := &DCStatusDetail{DatacenterId: dcID}
+
 		if dc, ok := findDatacenterInDomain(dom, dcID); ok {
 			dcEntry.DatacenterNickname = dc.Nickname
 		}
+
 		dcEntry.DCStatusByProperty = buildDCPropertyList(dom, dcID)
 		dcStatDetailList = append(dcStatDetailList, dcEntry)
 	}
@@ -206,51 +239,75 @@ func populateEmptyDCStatusList() ([]*DCStatusDetail, error) {
 }
 
 // Retrieve Datacenter status for domain
-func gatherDatacenterStatus() (*DCTrafficStati, error) {
-
+func gatherDatacenterStatus(c *cli.Context) (*DCTrafficStati, error) {
 	dcTrafficStati := &DCTrafficStati{Domain: domainName}
-	// calc period start and end
-	pstart, pend, err := calcPeriodStartandEnd("datacenter", statusPeriodLen)
+
+	// Initialize context and session
+	ctx := context.Background()
+	sess, err := edgegrid.InitializeSession(c)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize session: %w", err)
 	}
-	// get the domain struct. Will need as cycle thru DCs
-	dom, err := configgtm.GetDomain(domainName)
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(sess)
+
+	// calc period start and end
+	pstart, pend, err := calcPeriodStartandEnd(c, "datacenter", statusPeriodLen)
 	if err != nil {
 		return nil, err
 	}
 	dcTrafficStati.PeriodStart = pstart
 	dcTrafficStati.PeriodEnd = pend
-	optArgs := make(map[string]string)
-	optArgs["start"] = pstart
-	optArgs["end"] = pend
+
+	// get the domain struct via gtmClient
+	domainResp, err := gtmClient.GetDomain(ctx, gtm.GetDomainRequest{DomainName: domainName})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get domain: %w", err)
+	}
+	dom := (*gtm.Domain)(domainResp)
+
+	optArgs := map[string]string{
+		"start": pstart,
+		"end":   pend,
+	}
+
 	// Looping on DCs
 	for _, dcID := range qsDatacenters.flagList {
-		dcTStatus, err := reportsgtm.GetTrafficPerDatacenter(domainName, dcID, optArgs)
+		// Using your reportsgtm package, adapted for v11 with context and session
+		dcTStatus, err := reportsgtm.GetTrafficPerDatacenter(c, domainName, dcID, optArgs)
 		if err != nil {
 			return nil, err
 		}
+
 		// Build DC Properties enabled list
 		enabledPropertiesMap := buildDCPropertiesEnabledMap(dom, dcID)
-		dcEntry := &DCStatusDetail{DatacenterId: dcID, DatacenterNickname: dcTStatus.Metadata.DatacenterNickname, ReportInterval: dcTStatus.Metadata.Interval}
-		if dcTStatus.DataRows == nil || len(dcTStatus.DataRows) < 1 {
+		dcEntry := &DCStatusDetail{
+			DatacenterId:       dcID,
+			DatacenterNickname: dcTStatus.Metadata.DatacenterNickname,
+			ReportInterval:     dcTStatus.Metadata.Interval,
+		}
+
+		if len(dcTStatus.DataRows) == 0 {
 			dcEntry.DCStatusByProperty = buildDCPropertyList(dom, dcID)
 		} else {
-			// Need to poulate dc properties status structure by timestamp
 			enhPropList := make([]EnhancedPropertyStatus, 0)
 			for _, dctData := range dcTStatus.DataRows {
-				// make map copy
 				enabledPropMapCopy := make(map[string]*trafficTargetEnabledStatus)
-				for i, d := range enabledPropertiesMap {
-					enabledPropMapCopy[i] = d
+				for k, v := range enabledPropertiesMap {
+					enabledPropMapCopy[k] = v
 				}
+
 				enhPropStat := EnhancedPropertyStatus{Timestamp: dctData.Timestamp}
 				propsList := make([]TimestampPropertyStatus, 0)
+
 				for _, props := range dctData.Properties {
-					propRowData := TimestampPropertyStatus{}
-					propRowData.Name = props.Name
-					propRowData.Requests = props.Requests
-					propRowData.Status = props.Status
+					propRowData := TimestampPropertyStatus{
+						DCTDRow: reportsgtm.DCTDRow{
+							Name:     props.Name,
+							Requests: props.Requests,
+							Status:   props.Status,
+						},
+					}
 					if dcEnb, ok := enabledPropMapCopy[props.Name]; ok {
 						propRowData.Enabled = dcEnb.ttEnabled
 						propRowData.Weight = dcEnb.ttWeight
@@ -258,199 +315,225 @@ func gatherDatacenterStatus() (*DCTrafficStati, error) {
 					delete(enabledPropMapCopy, props.Name)
 					propsList = append(propsList, propRowData)
 				}
-				// Add in any missing Properties
+
+				// Add missing properties
 				for propName, eInfo := range enabledPropMapCopy {
-					propRowData := TimestampPropertyStatus{}
-					propRowData.Name = propName
-					propRowData.Requests = 0
-					propRowData.Status = "0"
-					propRowData.Enabled = eInfo.ttEnabled
-					propRowData.Weight = eInfo.ttWeight
+					propRowData := TimestampPropertyStatus{
+						DCTDRow: reportsgtm.DCTDRow{
+							Name:     propName,
+							Requests: 0,
+							Status:   "0",
+						},
+						Enabled: eInfo.ttEnabled,
+						Weight:  eInfo.ttWeight,
+					}
 					propsList = append(propsList, propRowData)
 				}
+
 				enhPropStat.Properties = propsList
 				enhPropList = append(enhPropList, enhPropStat)
-
 			}
 			dcEntry.DCStatusByProperty = enhPropList
 		}
 		dcTrafficStati.StatusByDatacenter = append(dcTrafficStati.StatusByDatacenter, dcEntry)
 	}
 	return dcTrafficStati, nil
-
 }
 
 // Retrieve Domain status
-func getDomainStatus() (*configgtm.ResponseStatus, error) {
+func getDomainStatus(c *cli.Context) (*gtm.GetDomainStatusResponse, error) {
 
-	domStatus, err := configgtm.GetDomainStatus(domainName)
+	ctx := context.Background()
+
+	sess, err := edgegrid.InitializeSession(c)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize session: %w", err)
 	}
 
-	return domStatus, nil
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
 
+	statusResp, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{
+		DomainName: domainName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve domain status: %w", err)
+	}
+
+	return statusResp, nil
 }
 
-// Retrieve Status and DC status for property
-func gatherPropertyStatus() (*PropertyStatus, error) {
+func uniqueIPs(ips []*reportsgtm.IpStatIp) []*reportsgtm.IpStatIp {
+	seen := map[string]bool{}
+	result := []*reportsgtm.IpStatIp{}
+	for _, ip := range ips {
+		if ip != nil && ip.Ip != "" && !seen[ip.Ip] {
+			result = append(result, ip)
+			seen[ip.Ip] = true
+		}
+	}
+	return result
+}
 
+func gatherPropertyStatus(c *cli.Context) (*PropertyStatus, error) {
 	propStat := &PropertyStatus{PropertyName: qsProperty}
-	// calc traffic period start and end
-	pstart, pend, err := calcPeriodStartandEnd("property", statusPeriodLen)
+
+	// Calculate period
+	pstart, pend, err := calcPeriodStartandEnd(c, "property", statusPeriodLen)
 	if err != nil {
 		return nil, err
 	}
-	optArgs := make(map[string]string)
-	// Retrieve IP Availability status
-	optArgs["mostRecent"] = "true"
-	propertyIpAvail, err := reportsgtm.GetIpStatusPerProperty(domainName, qsProperty, optArgs)
+
+	// Initialize session and clients
+	ctx := context.Background()
+	sess, err := edgegrid.InitializeSession(c)
+	if err != nil {
+		return nil, fmt.Errorf("session failed %v", err)
+	}
+	ctx = edgegrid.WithSession(ctx, sess)
+	gtmClient := gtm.Client(edgegrid.GetSession(ctx))
+
+	// Get IP status
+	optArgs := map[string]string{"mostRecent": "true"}
+	propertyIpAvail, err := reportsgtm.GetIpStatusPerProperty(c, domainName, qsProperty, optArgs)
 	if err != nil {
 		return nil, err
 	}
-	var propertyTraffic *reportsgtm.PropertyTrafficResponse
-	// Retrieve Property Traffic status
+
+	// Get traffic
 	delete(optArgs, "mostRecent")
 	optArgs["start"] = pstart
 	optArgs["end"] = pend
-	propertyTraffic, err = reportsgtm.GetTrafficPerProperty(domainName, qsProperty, optArgs)
+	propertyTraffic, err := reportsgtm.GetTrafficPerProperty(c, domainName, qsProperty, optArgs)
 	if err != nil {
 		return nil, err
 	}
-	// Calc requests % per datacenter
+
+	// Aggregate requests
 	type dcReqs struct {
 		reqs int64
 		perc float64
 	}
-	var dcReqMap map[int]dcReqs
-	var propertyTotalReqs int64
-	dcReqMap = make(map[int]dcReqs)
-	for _, tData := range propertyTraffic.DataRows {
-		for _, dcData := range tData.Datacenters {
-			dcRow, ok := dcReqMap[dcData.DatacenterId] // try to get entry
-			if !ok {
-				dcRow = dcReqs{}
-			}
-			dcRow.reqs += dcData.Requests
-			dcReqMap[dcData.DatacenterId] = dcRow
-			propertyTotalReqs += dcData.Requests
+	dcReqMap := make(map[int]dcReqs)
+	var totalReqs int64
+
+	for _, t := range propertyTraffic.DataRows {
+		for _, dc := range t.Datacenters {
+			r := dcReqMap[dc.DatacenterId]
+			r.reqs += dc.Requests
+			dcReqMap[dc.DatacenterId] = r
+			totalReqs += dc.Requests
 		}
-	}
-	// find any missing datacenters. as aside,build map of targets capturing name and enabled flag.
-	var disabledDCPeriodList []*reportsgtm.PropertyDRow
-	type trafficTargetEnabledStatus struct {
-		ttName     string
-		ttNickname string
-		ttEnabled  bool
-		ttWeight   float64
-	}
-	ttEnabledMap := make(map[int]trafficTargetEnabledStatus)
-	prop, err := configgtm.GetProperty(qsProperty, domainName)
-	// if error, can't find disabled targets ... results in incomplete set
-	if err != nil {
-		return nil, err
-	}
-	for _, tgt := range prop.TrafficTargets {
-		// collect enabled status for later use
-		ttMapEntry := trafficTargetEnabledStatus{ttName: tgt.Name, ttEnabled: tgt.Enabled,
-			ttWeight: tgt.Weight}
-		// need info from DC, e.g. nickname
-		dc, err := configgtm.GetDatacenter(tgt.DatacenterId, domainName)
-		if err == nil {
-			ttMapEntry.ttNickname = dc.Nickname
-		}
-		ttEnabledMap[tgt.DatacenterId] = ttMapEntry
-		if _, ok := dcReqMap[tgt.DatacenterId]; !ok {
-			// not in map so not in returned results ...
-			//create and populate
-			disabledDCP := &reportsgtm.PropertyDRow{DatacenterId: tgt.DatacenterId, TrafficTargetName: tgt.Name, Requests: 0}
-			disabledDCP.Status = "0" // if wasn't reported on, likely not responding to requests
-			// collect enabled status for later use
-			disabledDCP.Nickname = ttMapEntry.ttNickname
-			disabledDCPeriodList = append(disabledDCPeriodList, disabledDCP)
-			// add an entry to dcReqMap
-			dcReqMap[tgt.DatacenterId] = dcReqs{reqs: 0, perc: 0.0}
-		}
-	}
-	// append to datarow dc lists
-	for _, drEntry := range propertyTraffic.DataRows {
-		drEntry.Datacenters = append(drEntry.Datacenters, disabledDCPeriodList...)
-	}
-	// Calculate percentage for WHOLE period
-	for k, dcRow := range dcReqMap {
-		if propertyTotalReqs > 0 {
-			dcRow.perc = (float64(dcRow.reqs) / float64(propertyTotalReqs)) * 100
-		} else {
-			dcRow.perc = float64(0)
-		}
-		dcReqMap[k] = dcRow
 	}
 
-	// Build PropertyResponse struct
+	// Prepare mapping for traffic targets
+	type ttEnabled struct {
+		ttName, ttNickname string
+		ttEnabled          bool
+		ttWeight           float64
+	}
+	ttEnabledMap := map[int]ttEnabled{}
+
+	// Get domain config
+	domResp, err := gtmClient.GetDomain(ctx, gtm.GetDomainRequest{DomainName: domainName})
+	if err != nil {
+		return nil, fmt.Errorf("fetching domain failed: %w", err)
+	}
+	domain := (*gtm.Domain)(domResp)
+
+	// Extract traffic target config
+	for _, prop := range domain.Properties {
+		if prop.Name != qsProperty {
+			continue
+		}
+		for _, tgt := range prop.TrafficTargets {
+			entry := ttEnabled{
+				ttName:    tgt.Name,
+				ttEnabled: tgt.Enabled,
+				ttWeight:  tgt.Weight,
+			}
+			if dc, ok := findDatacenterInDomain(domain, tgt.DatacenterID); ok {
+				entry.ttNickname = dc.Nickname
+			}
+			ttEnabledMap[tgt.DatacenterID] = entry
+		}
+	}
+
+	// Calculate request percentages
+	for k, r := range dcReqMap {
+		if totalReqs > 0 {
+			r.perc = float64(r.reqs) / float64(totalReqs) * 100
+		}
+		dcReqMap[k] = r
+	}
+
+	// Group IPs by datacenter ID
+	ipByDc := make(map[int][]*reportsgtm.IpStatIp)
+	for _, dr := range propertyIpAvail.DataRows {
+		for _, dc := range dr.Datacenters {
+			ipByDc[dc.DatacenterId] = append(ipByDc[dc.DatacenterId], dc.IPs...)
+		}
+	}
+
+	// Ensure all datacenters from domain config are present in ipByDc map
+	for _, prop := range domain.Properties {
+		if prop.Name != qsProperty {
+			continue
+		}
+		for _, tgt := range prop.TrafficTargets {
+			if _, exists := ipByDc[tgt.DatacenterID]; !exists {
+				ipByDc[tgt.DatacenterID] = []*reportsgtm.IpStatIp{} // ensure presence
+			}
+		}
+	}
+
+	// Prepare metadata
 	propStat.Domain = propertyIpAvail.Metadata.Domain
-	propStat.PropertyName = propertyIpAvail.Metadata.Property
 	propStat.PeriodStart = propertyTraffic.Metadata.Start
 	propStat.PeriodEnd = propertyTraffic.Metadata.End
 	propStat.ReportInterval = propertyTraffic.Metadata.Interval
 	propStat.DatacenterIntervalStatus = propertyTraffic.DataRows
-	var statusSummary *PropertyStatusSummary
-	statusSummary = &PropertyStatusSummary{}
+
+	summary := &PropertyStatusSummary{}
 	if len(propertyIpAvail.DataRows) > 0 {
-		statusSummary.LastUpdate = propertyIpAvail.DataRows[0].Timestamp
-		statusSummary.CutOff = propertyIpAvail.DataRows[0].CutOff
+		summary.LastUpdate = propertyIpAvail.DataRows[0].Timestamp
+		summary.CutOff = propertyIpAvail.DataRows[0].CutOff
 	} else {
-		statusSummary.LastUpdate = "Not Available"
+		summary.LastUpdate = "Not Available"
 	}
-	var propertyDCStatusArray []*PropertyDCStatus
-	if len(propertyIpAvail.DataRows) > 0 {
-		for _, dr := range propertyIpAvail.DataRows {
-			for _, dc := range dr.Datacenters {
-				propertyDCStatus := &PropertyDCStatus{}
-				propertyDCStatus.Nickname = dc.Nickname
-				propertyDCStatus.DatacenterId = dc.DatacenterId
-				propertyDCStatus.TrafficTargetName = dc.TrafficTargetName
-				propertyDCStatus.IPs = dc.IPs
-				propertyDCStatus.DCPropertyUsage = fmt.Sprintf("%.2f", dcReqMap[dc.DatacenterId].perc) + "%"
-				propertyDCStatus.DCTotalPeriodRequests = dcReqMap[dc.DatacenterId].reqs
-				propertyDCStatus.DCEnabled = ttEnabledMap[dc.DatacenterId].ttEnabled
-				propertyDCStatus.DCWeight = ttEnabledMap[dc.DatacenterId].ttWeight
-				propertyDCStatusArray = append(propertyDCStatusArray, propertyDCStatus)
-				// remove entry from map ...
-				delete(ttEnabledMap, dc.DatacenterId)
-			}
+
+	// Initialize full DC status list from domain-config targets
+	var dcStatusList []*PropertyDCStatus
+	for dcID, target := range ttEnabledMap {
+		reqs := dcReqMap[dcID]
+		ips := uniqueIPs(ipByDc[dcID]) // Get IPs even if empty
+
+		dcStatus := &PropertyDCStatus{
+			IpStatPerPropDRow: reportsgtm.IpStatPerPropDRow{
+				DatacenterId:      dcID,
+				TrafficTargetName: target.ttName,
+				Nickname:          target.ttNickname,
+				IPs:               ips,
+			},
+			DCTotalPeriodRequests: reqs.reqs,
+			DCPropertyUsage:       fmt.Sprintf("%.2f%%", reqs.perc),
+			DCEnabled:             target.ttEnabled,
+			DCWeight:              target.ttWeight,
 		}
+		dcStatusList = append(dcStatusList, dcStatus)
+
+		//  Debugging
+		//fmt.Printf("[DEBUG] Added DC %d (%s) with %d IPs\n", dcID, target.ttName, len(ips))
 	}
-	// Add in disabled DCs
-	var disabledDCSumList []*PropertyDCStatus
-	for dcId, eMap := range ttEnabledMap {
-		disabledDCSum := &PropertyDCStatus{}
-		disabledDCSum.DatacenterId = dcId
-		disabledDCSum.TrafficTargetName = eMap.ttName
-		disabledDCSum.DCEnabled = eMap.ttEnabled
-		disabledDCSum.DCWeight = eMap.ttWeight
-		disabledDCSum.Nickname = eMap.ttNickname
-		disabledDCSum.DCPropertyUsage = "0.00%"
-		disabledDCSum.IPs = make([]*reportsgtm.IpStatIp, 0)
-		disabledDCSumList = append(disabledDCSumList, disabledDCSum)
-	}
-	propertyDCStatusArray = append(propertyDCStatusArray, disabledDCSumList...)
-	statusSummary.PropertyDCStatus = propertyDCStatusArray
-	propStat.StatusSummary = statusSummary
+
+	summary.PropertyDCStatus = dcStatusList
+	propStat.StatusSummary = summary
 
 	return propStat, nil
-
 }
 
 // worker function for query-status
 func cmdQueryStatus(c *cli.Context) error {
-
-	config, err := akamai.GetEdgegridConfig(c)
-	if err != nil {
-		return err
-	}
-
-	reportsgtm.Init(config)
-	configgtm.Init(config)
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
@@ -461,6 +544,7 @@ func cmdQueryStatus(c *cli.Context) error {
 
 	qsProperty = c.String("property")
 	qsDatacenters = (c.Generic("datacenter")).(*arrayFlags)
+
 	if c.IsSet("verbose") {
 		verboseStatus = true
 	}
@@ -468,7 +552,7 @@ func cmdQueryStatus(c *cli.Context) error {
 	if c.IsSet("property") && c.IsSet("datacenter") {
 		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
 	}
-	err = ParseNicknames(qsDatacenters.nicknamesList, domainName)
+	err := ParseNicknames(c, qsDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
 			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
@@ -484,23 +568,22 @@ func cmdQueryStatus(c *cli.Context) error {
 
 	if c.IsSet("datacenter") {
 		if !c.IsSet("json") {
-			akamai.StartSpinner("Collecting DC status ", "")
+			fmt.Println("Collecting DC status ", "")
 		}
-		objStatus, err = gatherDatacenterStatus()
+		objStatus, err = gatherDatacenterStatus(c)
 	} else if c.IsSet("property") {
 		if !c.IsSet("json") {
-			akamai.StartSpinner("Collecting Property status ", "")
+			fmt.Println("Collecting Property status ", "")
 		}
-		objStatus, err = gatherPropertyStatus()
+		objStatus, err = gatherPropertyStatus(c)
 	} else {
 		if !c.IsSet("json") {
-			akamai.StartSpinner("Collecting Domain status ", "")
+			fmt.Println("Collecting Domain status ", "")
 		}
-		objStatus, err = getDomainStatus()
+		objStatus, err = getDomainStatus(c)
 	}
 	// check for failure
 	if err != nil {
-		akamai.StopSpinnerFail()
 		if verboseStatus {
 			return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
 		} else {
@@ -515,7 +598,6 @@ func cmdQueryStatus(c *cli.Context) error {
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 	} else {
-		akamai.StopSpinnerOk()
 
 		fmt.Fprintln(c.App.Writer, "")
 		if c.IsSet("datacenter") {
@@ -527,7 +609,9 @@ func cmdQueryStatus(c *cli.Context) error {
 			fmt.Fprintln(c.App.Writer, renderPropertyTable(objStatus.(*PropertyStatus), c))
 
 		} else {
-			fmt.Fprintln(c.App.Writer, renderDomainTable(objStatus.(*configgtm.ResponseStatus), c))
+			//fmt.Fprintln(c.App.Writer, renderDomainTable(objStatus.(*gtm.ResponseStatus), c))
+			statusResp := objStatus.(*gtm.GetDomainStatusResponse)
+			fmt.Fprintln(c.App.Writer, renderDomainTable((*gtm.ResponseStatus)(statusResp), c))
 		}
 	}
 
@@ -596,8 +680,8 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 }
 
 func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
-
 	var outString string
+
 	outString += fmt.Sprintln("Domain: ", objStatus.Domain)
 	outString += fmt.Sprintln("Property: ", objStatus.PropertyName)
 	outString += fmt.Sprintln("Period Start: ", objStatus.PeriodStart)
@@ -609,6 +693,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	table := tablewriter.NewWriter(tableString)
 	outString += fmt.Sprintln("Status Summary -- Last Update: ", objStatus.StatusSummary.LastUpdate, ", CutOff: ", objStatus.StatusSummary.CutOff)
 	outString += fmt.Sprintln(" ")
+
 	table.SetHeader([]string{"Datacenter", "Nickname", "Target Name", "Enabled", "Weight", "Total Requests", "Property Usage", "IP", "State"})
 	table.SetReflowDuringAutoWrap(false)
 	table.SetCenterSeparator(" ")
@@ -616,62 +701,68 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	table.SetRowSeparator(" ")
 	table.SetBorder(false)
 	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER,
+	})
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
-	dclid := " "
-	dcln := " "
-	dctn := " "
-	dcptl := " "
-	dcptr := " "
-	dcpperc := " "
-	dcip := " "
-	dcenabled := " "
-	dcweight := " "
 	if len(objStatus.StatusSummary.PropertyDCStatus) == 0 {
 		rowData := []string{"No status summary data available", " ", " ", " ", " ", " ", " ", " ", " "}
 		table.Append(rowData)
 	} else {
 		for _, dc := range objStatus.StatusSummary.PropertyDCStatus {
-			dcln = dc.Nickname
-			dclid = strconv.Itoa(dc.DatacenterId)
-			dctn = dc.TrafficTargetName
-			dcpperc = dc.DCPropertyUsage
-			dcenabled = strconv.FormatBool(dc.DCEnabled)
-			dcweight = strconv.FormatFloat(dc.DCWeight, 'f', 1, 64)
-			dcptr = strconv.FormatInt(dc.DCTotalPeriodRequests, 10)
-			if len(dc.IPs) < 1 {
-				dc.IPs = []*reportsgtm.IpStatIp{&reportsgtm.IpStatIp{}}
+			//fmt.Printf("[DEBUG] Processing Datacenter #%d: ID=%d, Nickname=%q, TargetName=%q\n", i, dc.DatacenterId, dc.Nickname, dc.TrafficTargetName)
+			datacenterId := strconv.Itoa(dc.DatacenterId)
+			nickname := dc.Nickname
+			targetName := dc.TrafficTargetName
+			enabled := strconv.FormatBool(dc.DCEnabled)
+			weight := strconv.FormatFloat(dc.DCWeight, 'f', 1, 64)
+			totalReqs := strconv.FormatInt(dc.DCTotalPeriodRequests, 10)
+			usage := dc.DCPropertyUsage
+
+			// Ensure at least one row even if there are no IPs
+			ips := dc.IPs
+			if len(ips) == 0 {
+				//fmt.Printf("[DEBUG] Datacenter %d has no IPs, adding empty placeholder\n", dc.DatacenterId)
+				ips = []*reportsgtm.IpStatIp{{}} // single empty IP entry
 			}
-			for k, ip := range dc.IPs {
-				if k == 0 {
-					dcip = ip.Ip
-				} else {
-					dctn = " "
-					dclid = " "
-					dcln = " "
-					dcip = " "
-					dcpperc = " "
-					dcptr = " "
-					dcenabled = " "
-					dcweight = " "
+
+			for k, ip := range ips {
+				if ip == nil {
+					//fmt.Printf("[WARN] Nil IP in Datacenter %d at index %d — skipping\n", dc.DatacenterId, k)
+					continue
 				}
-				rowData := []string{dclid, dcln, dctn, dcenabled, dcweight, dcptr, dcpperc, dcip, fmt.Sprintf("HandedOut: %s", strconv.FormatBool(ip.HandedOut))}
-				table.Append(rowData)
-				rowData = []string{"", "", "", "", "", "", " ", fmt.Sprintf("Score: %s", fmt.Sprintf("%.2f", ip.Score))}
-				table.Append(rowData)
-				rowData = []string{"", "", "", "", "", "", " ", fmt.Sprintf("Alive: %s", strconv.FormatBool(ip.Alive))}
-				table.Append(rowData)
+				/*fmt.Printf("[DEBUG] IP #%d for Datacenter %d: %q (HandedOut=%v, Alive=%v, Score=%.2f)\n",
+				k, dc.DatacenterId, ip.Ip, ip.HandedOut, ip.Alive, ip.Score)*/
+				ipAddr := ip.Ip
+				handedOut := fmt.Sprintf("HandedOut: %t", ip.HandedOut)
+				score := fmt.Sprintf("Score: %.2f", ip.Score)
+				alive := fmt.Sprintf("Alive: %t", ip.Alive)
+
+				if k == 0 {
+					row := []string{datacenterId, nickname, targetName, enabled, weight, totalReqs, usage, ipAddr, handedOut}
+					//fmt.Printf("[DEBUG] First IP row: %v\n", row)
+					table.Append(row)
+				} else {
+					row := []string{"", "", "", "", "", "", "", ipAddr, handedOut}
+					//fmt.Printf("[DEBUG] Additional IP row: %v\n", row)
+					table.Append(row)
+				}
+				table.Append([]string{"", "", "", "", "", "", "", score, ""})
+				table.Append([]string{"", "", "", "", "", "", "", alive, ""})
 			}
 		}
 	}
 	table.Render()
 	outString += fmt.Sprintln(tableString.String())
 
-	// Build Datacenter Status table
+	// Build Datacenter Status Table
 	outString += fmt.Sprintln(" ")
 	outString += fmt.Sprintln("Datacenter Status")
 	outString += fmt.Sprintln(" ")
+
 	tableString = &strings.Builder{}
 	dcTable := tablewriter.NewWriter(tableString)
 
@@ -682,40 +773,41 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	dcTable.SetRowSeparator(" ")
 	dcTable.SetBorder(false)
 	dcTable.SetAutoWrapText(false)
-	dcTable.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
+	dcTable.SetColumnAlignment([]int{
+		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_CENTER,
+	})
 	dcTable.SetAlignment(tablewriter.ALIGN_CENTER)
 
-	dclid = " "
-	dcln = " "
-	dcptl = " "
 	if len(objStatus.DatacenterIntervalStatus) == 0 {
-		rowData := []string{"No datacenter interval status available", " ", " ", " ", " "}
-		dcTable.Append(rowData)
+		dcTable.Append([]string{"No datacenter interval status available", " ", " ", " ", " "})
 	} else {
 		for _, dcis := range objStatus.DatacenterIntervalStatus {
-			dcptl = dcis.Timestamp
 			for k, dc := range dcis.Datacenters {
-				if k == 0 {
-					dcptl = dcis.Timestamp
-				} else {
-					dcptl = " "
+				timestamp := dcis.Timestamp
+				if k > 0 {
+					timestamp = " "
 				}
-				dcln = dc.Nickname
-				dclid = strconv.Itoa(dc.DatacenterId)
-				rowData := []string{dcptl, dclid, dcln, strconv.FormatInt(dc.Requests, 10), dc.Status}
-				dcTable.Append(rowData)
+				row := []string{
+					timestamp,
+					strconv.Itoa(dc.DatacenterId),
+					dc.Nickname,
+					strconv.FormatInt(dc.Requests, 10),
+					dc.Status,
+				}
+				dcTable.Append(row)
 			}
 		}
 	}
 	dcTable.Render()
-
 	outString += fmt.Sprintln(tableString.String())
-	return outString
 
+	return outString
 }
 
 // Pretty print output
-func renderDomainTable(status *configgtm.ResponseStatus, c *cli.Context) string {
+func renderDomainTable(status *gtm.ResponseStatus, c *cli.Context) string {
 
 	var outString string
 	outString += fmt.Sprintln(" ")
@@ -735,7 +827,7 @@ func renderDomainTable(status *configgtm.ResponseStatus, c *cli.Context) string 
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
-	rowData := []string{"ChangeId", status.ChangeId}
+	rowData := []string{"ChangeId", status.ChangeID}
 	table.Append(rowData)
 	rowData = []string{"Message", status.Message}
 	table.Append(rowData)
