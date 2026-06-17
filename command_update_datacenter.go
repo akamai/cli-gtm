@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -201,31 +201,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		b, _ := json.MarshalIndent(updateSum, "", "  ")
 		fmt.Fprintln(c.App.Writer, string(b))
 	} else {
-		fmt.Fprintln(c.App.Writer, "\n"+renderDCStatus(updateSum, c))
+		fmt.Fprintln(c.App.Writer, "\n"+renderDCStatus(c))
 	}
 
 	return nil
 }
 
 // Renders datacenter update summary in table format
-func renderDCStatus(upSum UpdateSummary, c *cli.Context) string {
+func renderDCStatus(c *cli.Context) string {
 	var outString strings.Builder
 	outString.WriteString("\nDatacenter Update Summary\n\n")
 
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{
-		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
-		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
-	})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Completed Updates
 	table.Append([]string{"Completed Updates", " ", " ", " "})

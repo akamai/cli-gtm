@@ -1,5 +1,13 @@
 # Release Notes
 
+## Version 0.7.0 
+
+### Features/Enhancements
+
+* Upgrade to Edgegrid v13.2.0
+* Update project license file
+* Migrate to go 1.26.4
+
 ## Version 0.6.0 (January 2026)
 
 ### Features/Enhancements

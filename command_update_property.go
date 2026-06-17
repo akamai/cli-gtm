@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -128,8 +128,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
 		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
 	}
-	if c.IsSet("json") {
-		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
+	if !c.IsSet("json") {
+		fmt.Printf("Updating property %s\n", propertyName)
 	}
 
 	req := gtm.GetPropertyRequest{
@@ -148,7 +148,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if !c.IsSet("json") {
 		fmt.Println(targetsmsg)
 	}
-	fmt.Sprintf(targetsmsg)
 	fmt.Println("Updating Traffic Targets ", "")
 	var propTargets = map[int]string{}
 	//for _, traffTarg := range trafficTargets {
@@ -201,7 +200,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterID == dcID {
-				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
+				if !c.IsSet("json") {
+					fmt.Printf("%s contains dc %s\n", traffTarg.Name, strconv.Itoa(dcID))
+				}
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
 					traffTarg.Enabled = pEnabled
 					changes_made = true
@@ -221,7 +222,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	if c.IsSet("target") {
 		// Any new target?
-		for cmdTarget, _ := range pTargets.targetList {
+		for cmdTarget := range pTargets.targetList {
 			if _, ok := propTargets[cmdTarget]; !ok {
 				// New target. Find it
 				for _, t := range pTargets.targets {
@@ -331,7 +332,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		}
 
 		if c.IsSet("json") {
-			fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
+			fmt.Fprintf(c.App.Writer, "Property %s updated\n", propertyName)
 		}
 
 		if c.IsSet("json") && c.Bool("json") {
@@ -349,16 +350,16 @@ func cmdUpdateProperty(c *cli.Context) error {
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			if c.IsSet("verbose") && verboseStatus {
-				fmt.Fprintln(c.App.Writer, renderStatus(*propStat.Status, c))
+				fmt.Fprintln(c.App.Writer, renderStatus(*propStat.Status))
 			} else {
 				fmt.Fprintln(c.App.Writer, "Response Status")
 				fmt.Fprintln(c.App.Writer, " ")
-				fmt.Fprintln(c.App.Writer, fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID))
+				fmt.Fprintf(c.App.Writer, "ChangeId: %s\n", propStat.Status.ChangeID)
 			}
 		}
 	} else {
 		if !c.IsSet("json") {
-			fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
+			fmt.Fprintf(c.App.Writer, "No update required for Property %s\n", propertyName)
 		}
 	}
 
@@ -367,7 +368,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 }
 
 // Pretty print output
-func renderStatus(status gtm.ResponseStatus, c *cli.Context) string {
+func renderStatus(status gtm.ResponseStatus) string {
 
 	var outString string
 	outString += fmt.Sprintln(" ")
@@ -375,15 +376,6 @@ func renderStatus(status gtm.ResponseStatus, c *cli.Context) string {
 	outString += fmt.Sprintln(" ")
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
 	rowData := []string{"ChangeId", status.ChangeID}
