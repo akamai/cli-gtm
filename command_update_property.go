@@ -35,6 +35,17 @@ const defaultTimeout int = 300
 
 // worker function for update-property
 func cmdUpdateProperty(c *cli.Context) error {
+	failStep := func(step, message string, args ...interface{}) error {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
+		}
+		return cli.NewExitError(color.RedString(message, args...), 1)
+	}
+	printOK := func(step string) {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.GreenString("[OK]"))
+		}
+	}
 
 	var pWeight float64
 	var pTargets *TargetFlags
@@ -65,12 +76,13 @@ func cmdUpdateProperty(c *cli.Context) error {
 	propertyName := c.Args().Get(1)
 
 	// Changes may be to enabled, weight or servers
+	updateStep := fmt.Sprintf("Updating property %s", propertyName)
 	pWeight = c.Float64("weight")
 	pServers = c.StringSlice("server")
 	pLivenessTests = c.StringSlice("liveness_test")
 	fmt.Println("pLivenessTests: ", pLivenessTests)
 	if c.IsSet("enable") && c.IsSet("disable") {
-		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+		return failStep(updateStep, "must specified either enable or disable.")
 	} else if c.IsSet("enable") {
 		pEnabled = true
 	} else if c.IsSet("disable") {
@@ -91,45 +103,42 @@ func cmdUpdateProperty(c *cli.Context) error {
 		pTimeout = c.Int("timeout")
 	}
 	if c.IsSet("datacenter") && c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("enable/disable can only be applied to either datacenter(s) OR liveness_test(s)"), 1)
+		return failStep(updateStep, "enable/disable can only be applied to either datacenter(s) OR liveness_test(s)")
 	}
 	if !c.IsSet("target") && !c.IsSet("datacenter") && !c.IsSet("liveness_test") {
-		return cli.NewExitError(color.RedString("datacenter(s), target(s) and/or liveness_test(s)s must be specified"), 1)
+		return failStep(updateStep, "datacenter(s), target(s) and/or liveness_test(s)s must be specified")
 	}
 	// if nicknames specified, add to dcFlags
 	err = ParseNicknames(c, pDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+			return failStep(updateStep, "Unable to retrieve datacenter list. "+err.Error())
 		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+			return failStep(updateStep, "Unable to retrieve datacenter.")
 		}
 	}
 	if !c.IsSet("datacenter") && !c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("datacenter(s) or liveness_test(s) must be specified when enable or disable are specified"), 1)
+		return failStep(updateStep, "datacenter(s) or liveness_test(s) must be specified when enable or disable are specified")
 	}
 	if !c.IsSet("datacenter") && (c.IsSet("server") || c.IsSet("weight")) {
-		return cli.NewExitError(color.RedString("datacenter(s) must be specified when server or weight field changes are specified"), 1)
+		return failStep(updateStep, "datacenter(s) must be specified when server or weight field changes are specified")
 	}
 	if c.IsSet("liveness_test") && !(c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("liveness_test(s) specified without enable or disable directive"), 1)
+		return failStep(updateStep, "liveness_test(s) specified without enable or disable directive")
 	}
 	if c.IsSet("datacenter") && !(c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("datacenter(s) specified with no field changes"), 1)
+		return failStep(updateStep, "datacenter(s) specified with no field changes")
 	}
 	for _, dcID := range pDatacenters.flagList {
 		if _, ok := pTargets.targetList[dcID]; ok {
-			return cli.NewExitError(color.RedString("datacenters and targets cannot be the same"), 1)
+			return failStep(updateStep, "datacenters and targets cannot be the same")
 		}
 	}
 	if c.IsSet("server") && len(pDatacenters.flagList) > 1 {
-		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
+		return failStep(updateStep, "server update may only apply to one datacenter")
 	}
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
-		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
-	}
-	if !c.IsSet("json") {
-		fmt.Printf("Updating property %s\n", propertyName)
+		return failStep(updateStep, "weight update may only apply to one datacenter")
 	}
 
 	req := gtm.GetPropertyRequest{
@@ -139,8 +148,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	property, err := gtmClient.GetProperty(ctx, req)
 	if err != nil {
-		return cli.NewExitError(color.RedString("Property not found: "+err.Error()), 1)
+		return failStep(updateStep, "Property not found: "+err.Error())
 	}
+	printOK(updateStep)
 
 	changes_made := false
 	trafficTargets := property.TrafficTargets
@@ -148,7 +158,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if !c.IsSet("json") {
 		fmt.Println(targetsmsg)
 	}
-	fmt.Println("Updating Traffic Targets ", "")
+	trafficTargetsStep := "Updating Traffic Targets"
 	var propTargets = map[int]string{}
 	//for _, traffTarg := range trafficTargets {
 	for i := range property.TrafficTargets {
@@ -263,8 +273,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 		if pDryrun {
 			json, err := json.MarshalIndent(property, "", "  ")
 			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display proposed property update"), 1)
+				return failStep(trafficTargetsStep, "Unable to display proposed property update")
 			}
+			printOK(trafficTargetsStep)
 			fmt.Fprintln(c.App.Writer, "Proposed Property Update")
 			fmt.Fprintln(c.App.Writer, string(json))
 
@@ -284,16 +295,15 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		propStat, err := gtmClient.UpdateProperty(ctx, updateReq)
 		if err != nil {
-			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
+			return failStep(trafficTargetsStep, "Error updating property %s. %s", propertyName, err.Error())
 		}
-
+		printOK(trafficTargetsStep)
 		if pComplete && propStat.Status.PropagationStatus == "PENDING" {
 			sleepInterval := time.Duration(defaultInterval) * time.Second
 			sleepTimeout := time.Duration(pTimeout) * time.Second
 
-			if !c.IsSet("json") {
-				fmt.Println("\nWaiting for completion...")
-			}
+			completionStep := "Waiting for completion"
+			completionOK := false
 
 			for {
 				time.Sleep(sleepInterval)
@@ -303,9 +313,11 @@ func cmdUpdateProperty(c *cli.Context) error {
 					if !c.IsSet("json") {
 						fmt.Println("[Change deployed]")
 					}
+					completionOK = true
 					break
 				} else if propStat.Status.PropagationStatus == "DENIED" {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Change denied]")
 					}
 					break
@@ -313,6 +325,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 				if sleepTimeout <= 0 {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Maximum wait time elapsed. Use query-status to confirm successful deployment]")
 					}
 					break
@@ -321,6 +334,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 				domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 				if err != nil {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Unable to retrieve domain status]")
 					}
 					break
@@ -328,6 +342,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 				// domainStatus is a ResponseStatus type, so update propStat.Status
 				propStat.Status = (*gtm.ResponseStatus)(domainStatus)
+			}
+			if completionOK {
+				printOK(completionStep)
 			}
 		}
 
@@ -344,7 +361,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 			}
 			jsonOut, err := json.MarshalIndent(jsonStatus, "", "  ")
 			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+				return failStep(updateStep, "Unable to display status results")
 			}
 			fmt.Fprintln(c.App.Writer, string(jsonOut))
 		} else {

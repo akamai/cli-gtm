@@ -25,7 +25,6 @@ import (
 
 	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 )
 
@@ -42,6 +41,17 @@ var dryrunArray []json.RawMessage
 
 // worker function for update-datacenter
 func cmdUpdateDatacenter(c *cli.Context) error {
+	failStep := func(step, message string, args ...interface{}) error {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
+		}
+		return cli.NewExitError(color.RedString(message, args...), 1)
+	}
+	printOK := func(step string) {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.GreenString("[OK]"))
+		}
+	}
 
 	//Initialize Edgegrid session and context
 	ctx := context.Background()
@@ -60,9 +70,10 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 
 	// Get domain name and CLI flags
 	domainName := c.Args().First()
+	updateStep := fmt.Sprintf("Updating Datacenter(s) in domain %s", domainName)
 	dcDatacenters = c.Generic("datacenter").(*arrayFlags)
 	if c.IsSet("enable") && c.IsSet("disable") {
-		return cli.NewExitError(color.RedString("must specify either enable or disable."), 1)
+		return failStep(updateStep, "must specify either enable or disable.")
 	} else if c.IsSet("enable") {
 		dcEnabled = true
 	} else if c.IsSet("disable") {
@@ -87,22 +98,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		if verboseStatus {
 			msg += " " + err.Error()
 		}
-		return cli.NewExitError(color.RedString(msg), 1)
+		return failStep(updateStep, msg)
 	}
 	if len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
-		return cli.NewExitError(color.RedString("One or more datacenters is required"), 1)
-	}
-
-	if !c.IsSet("json") {
-		fmt.Printf("Updating Datacenter(s) in domain %s\n", domainName)
+		return failStep(updateStep, "One or more datacenters is required")
 	}
 
 	// 1. List all properties in given domain
 	properties, err := gtmClient.ListProperties(ctx, gtm.ListPropertiesRequest{DomainName: domainName})
 	if err != nil {
-		return cli.NewExitError(color.RedString("Unable to list properties: "+err.Error()), 1)
+		return failStep(updateStep, "Unable to list properties: "+err.Error())
 	}
+	printOK(updateStep)
 	propmsg := fmt.Sprintf("%s contains %d properties", domainName, len(properties))
 	if !c.IsSet("json") {
 		fmt.Println(propmsg)
@@ -111,9 +119,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	// 2. Iterate each property & apply changes
 	for _, prop := range properties {
 		changesMade := false
-		if !c.IsSet("json") {
-			fmt.Printf("Updating Property: %s\n", prop.Name)
-		}
+		propertyStep := fmt.Sprintf("Updating Property: %s", prop.Name)
 		targetsmsg := fmt.Sprintf("%s contains %d targets", prop.Name, len(prop.TrafficTargets))
 		if !c.IsSet("json") {
 			fmt.Println(targetsmsg)
@@ -134,8 +140,12 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 				b, err := json.MarshalIndent(prop, "", "  ")
 				if err != nil {
 					failedArray = append(failedArray, &FailUpdate{PropName: prop.Name, FailMsg: err.Error()})
+					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", propertyStep, color.RedString("[FAIL]"))
+					}
 				} else {
 					dryrunArray = append(dryrunArray, json.RawMessage(b))
+					printOK(propertyStep)
 				}
 				continue
 			}
@@ -145,13 +155,19 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 			})
 			if err != nil {
 				failedArray = append(failedArray, &FailUpdate{PropName: prop.Name, FailMsg: err.Error()})
+				if !c.IsSet("json") {
+					fmt.Printf("%s ... %s\n", propertyStep, color.RedString("[FAIL]"))
+				}
 			} else {
 				if c.IsSet("verbose") && verboseStatus {
 					succVerboseArray = append(succVerboseArray, &SuccUpdateVerbose{PropName: prop.Name, RespStat: resp.Status})
 				} else {
 					succShortArray = append(succShortArray, &SuccUpdateShort{PropName: prop.Name, ChangeId: resp.Status.ChangeID})
 				}
+				printOK(propertyStep)
 			}
+		} else {
+			printOK(propertyStep)
 		}
 	}
 
@@ -159,13 +175,16 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	if dcComplete && (len(succShortArray)+len(succVerboseArray) > 0) {
 		timeout := time.Duration(dcTimeout) * time.Second
 		interval := time.Duration(defaultInterval) * time.Second
-		if !c.IsSet("json") {
-			fmt.Println("Waiting for completion...")
-		}
+		completionStep := "Waiting for completion"
+		completionOK := true
 		for timeout > 0 {
 			domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 			if err != nil {
-				fmt.Printf("Error getting domain status: %v\n", err)
+				if !c.IsSet("json") {
+					fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
+					fmt.Printf("Error getting domain status: %v\n", err)
+				}
+				completionOK = false
 				break
 			}
 			if domainStatus.PropagationStatus == "COMPLETE" || domainStatus.PropagationStatus == "DENIED" {
@@ -173,6 +192,9 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 			}
 			time.Sleep(interval)
 			timeout -= interval
+		}
+		if completionOK {
+			printOK(completionStep)
 		}
 	}
 
@@ -203,54 +225,48 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	} else {
 		fmt.Fprintln(c.App.Writer, "\n"+renderDCStatus(c))
 	}
-
 	return nil
 }
 
-// Renders datacenter update summary in table format
+// Renders datacenter update summary in tabular format
 func renderDCStatus(c *cli.Context) string {
 	var outString strings.Builder
-	outString.WriteString("\nDatacenter Update Summary\n\n")
-
-	tableString := &strings.Builder{}
-	table := tablewriter.NewWriter(tableString)
+	outString.WriteString("Datacenter Update Summary:\n")
 
 	// Completed Updates
-	table.Append([]string{"Completed Updates", " ", " ", " "})
-
+	outString.WriteString("Completed Updates:\n")
 	if c.IsSet("verbose") && verboseStatus {
 		if len(succVerboseArray) == 0 {
-			table.Append([]string{" ", "No successful updates", " ", " "})
+			outString.WriteString("  (none)\n")
 		} else {
 			for _, prop := range succVerboseArray {
-				table.Append([]string{" ", prop.PropName, "ChangeId", prop.RespStat.ChangeID})
-				table.Append([]string{" ", " ", "Message", prop.RespStat.Message})
-				table.Append([]string{" ", " ", "Passing Validation", strconv.FormatBool(prop.RespStat.PassingValidation)})
-				table.Append([]string{" ", " ", "Propagation Status", prop.RespStat.PropagationStatus})
-				table.Append([]string{" ", " ", "Propagation Status Date", prop.RespStat.PropagationStatusDate})
+				outString.WriteString(fmt.Sprintf("  %s\n", prop.PropName))
+				outString.WriteString(fmt.Sprintf("    ChangeId: %s\n", prop.RespStat.ChangeID))
+				outString.WriteString(fmt.Sprintf("    Message: %s\n", prop.RespStat.Message))
+				outString.WriteString(fmt.Sprintf("    Passing Validation: %s\n", strconv.FormatBool(prop.RespStat.PassingValidation)))
+				outString.WriteString(fmt.Sprintf("    Propagation Status: %s\n", prop.RespStat.PropagationStatus))
+				outString.WriteString(fmt.Sprintf("    Status Date: %s\n", prop.RespStat.PropagationStatusDate))
 			}
 		}
 	} else {
 		if len(succShortArray) == 0 {
-			table.Append([]string{" ", "No successful updates", " ", " "})
+			outString.WriteString("  (none)\n")
 		} else {
 			for _, prop := range succShortArray {
-				table.Append([]string{" ", prop.PropName, "ChangeId", prop.ChangeId})
+				outString.WriteString(fmt.Sprintf("  %s (%s)\n", prop.PropName, prop.ChangeId))
 			}
 		}
 	}
 
 	// Failed Updates
-	table.Append([]string{"Failed Updates", " ", " ", " "})
+	outString.WriteString("Failed Updates:\n")
 	if len(failedArray) == 0 {
-		table.Append([]string{" ", "No failed property updates", " ", " "})
+		outString.WriteString("  (none)\n")
 	} else {
 		for _, prop := range failedArray {
-			table.Append([]string{" ", prop.PropName, "Failure Message", prop.FailMsg})
+			outString.WriteString(fmt.Sprintf("  %s: %s\n", prop.PropName, prop.FailMsg))
 		}
 	}
 
-	table.Render()
-	outString.WriteString(tableString.String())
 	return outString.String()
 }

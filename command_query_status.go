@@ -534,10 +534,16 @@ func gatherPropertyStatus(c *cli.Context) (*PropertyStatus, error) {
 
 // worker function for query-status
 func cmdQueryStatus(c *cli.Context) error {
+	failStep := func(step, message string, args ...interface{}) error {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
+		}
+		return cli.NewExitError(color.RedString(message, args...), 1)
+	}
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
-		return cli.NewExitError(color.RedString("domain is required"), 1)
+		return failStep("Querying status", "domain is required")
 	}
 
 	domainName = c.Args().Get(0)
@@ -550,51 +556,67 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 
 	if c.IsSet("property") && c.IsSet("datacenter") {
-		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
+		return failStep("Querying status", "property OR datacenter(s) must be specified")
 	}
 	err := ParseNicknames(c, qsDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+			return failStep("Querying status", "Unable to retrieve datacenter list. "+err.Error())
 		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+			return failStep("Querying status", "Unable to retrieve datacenter.")
 		}
 	}
 	if !c.IsSet("json") {
-		fmt.Println("Querying status")
+		fmt.Printf("Querying status ... %s\n", color.GreenString("[OK]"))
 	}
 
 	var objStatus interface{}
+	statusStep := "Collecting Domain status"
 
 	if c.IsSet("datacenter") {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting DC status ", "")
-		}
+		statusStep = "Collecting DC status"
 		objStatus, err = gatherDatacenterStatus(c)
+		if err != nil {
+			if verboseStatus {
+				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return failStep(statusStep, "Unable to retrieve status.")
+			}
+		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
+		}
 	} else if c.IsSet("property") {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting Property status ", "")
-		}
+		statusStep = "Collecting Property status"
 		objStatus, err = gatherPropertyStatus(c)
-	} else {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting Domain status ", "")
+		if err != nil {
+			if verboseStatus {
+				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return failStep(statusStep, "Unable to retrieve status.")
+			}
 		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
+		}
+	} else {
 		objStatus, err = getDomainStatus(c)
-	}
-	// check for failure
-	if err != nil {
-		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
-		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve status."), 1)
+		if err != nil {
+			if verboseStatus {
+				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return failStep(statusStep, "Unable to retrieve status.")
+			}
+		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
 		}
 	}
 
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
 		if err != nil {
-			return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+			return failStep(statusStep, "Unable to display status results")
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 	} else {
