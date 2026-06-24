@@ -121,9 +121,6 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		changesMade := false
 		propertyStep := fmt.Sprintf("Updating Property: %s", prop.Name)
 		targetsmsg := fmt.Sprintf("%s contains %d targets", prop.Name, len(prop.TrafficTargets))
-		if !c.IsSet("json") {
-			fmt.Println(targetsmsg)
-		}
 
 		for i, tt := range prop.TrafficTargets {
 			for _, dcID := range dcDatacenters.flagList {
@@ -147,6 +144,9 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 					dryrunArray = append(dryrunArray, json.RawMessage(b))
 					printOK(propertyStep)
 				}
+				if !c.IsSet("json") {
+					fmt.Println(targetsmsg)
+				}
 				continue
 			}
 
@@ -169,6 +169,9 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		} else {
 			printOK(propertyStep)
 		}
+		if !c.IsSet("json") {
+			fmt.Println(targetsmsg)
+		}
 	}
 
 	// 3. Wait for propagation if requested
@@ -176,7 +179,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		timeout := time.Duration(dcTimeout) * time.Second
 		interval := time.Duration(defaultInterval) * time.Second
 		completionStep := "Waiting for completion"
-		completionOK := true
+		completionOK := false
 		for timeout > 0 {
 			domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 			if err != nil {
@@ -184,10 +187,17 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 					fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 					fmt.Printf("Error getting domain status: %v\n", err)
 				}
-				completionOK = false
 				break
 			}
-			if domainStatus.PropagationStatus == "COMPLETE" || domainStatus.PropagationStatus == "DENIED" {
+			if domainStatus.PropagationStatus == "COMPLETE" {
+				completionOK = true
+				break
+			}
+			if domainStatus.PropagationStatus == "DENIED" {
+				if !c.IsSet("json") {
+					fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
+					fmt.Println("[Change denied]")
+				}
 				break
 			}
 			time.Sleep(interval)
@@ -223,50 +233,80 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		b, _ := json.MarshalIndent(updateSum, "", "  ")
 		fmt.Fprintln(c.App.Writer, string(b))
 	} else {
-		fmt.Fprintln(c.App.Writer, "\n"+renderDCStatus(c))
+		fmt.Fprint(c.App.Writer, renderDCStatus(c))
 	}
 	return nil
 }
 
-// Renders datacenter update summary in tabular format
+// Renders datacenter update summary in table format
 func renderDCStatus(c *cli.Context) string {
 	var outString strings.Builder
-	outString.WriteString("Datacenter Update Summary:\n")
+	outString.WriteString("Datacenter Update Summary\n\n")
+	rows := [][]string{}
 
 	// Completed Updates
-	outString.WriteString("Completed Updates:\n")
+	rows = append(rows, []string{"Completed Updates", "", "", ""})
+
 	if c.IsSet("verbose") && verboseStatus {
 		if len(succVerboseArray) == 0 {
-			outString.WriteString("  (none)\n")
+			rows = append(rows, []string{"", "No successful updates", "", ""})
 		} else {
 			for _, prop := range succVerboseArray {
-				outString.WriteString(fmt.Sprintf("  %s\n", prop.PropName))
-				outString.WriteString(fmt.Sprintf("    ChangeId: %s\n", prop.RespStat.ChangeID))
-				outString.WriteString(fmt.Sprintf("    Message: %s\n", prop.RespStat.Message))
-				outString.WriteString(fmt.Sprintf("    Passing Validation: %s\n", strconv.FormatBool(prop.RespStat.PassingValidation)))
-				outString.WriteString(fmt.Sprintf("    Propagation Status: %s\n", prop.RespStat.PropagationStatus))
-				outString.WriteString(fmt.Sprintf("    Status Date: %s\n", prop.RespStat.PropagationStatusDate))
+				rows = append(rows, []string{"", prop.PropName, "ChangeId", prop.RespStat.ChangeID})
+				rows = append(rows, []string{"", "", "Message", prop.RespStat.Message})
+				rows = append(rows, []string{"", "", "Passing Validation", strconv.FormatBool(prop.RespStat.PassingValidation)})
+				rows = append(rows, []string{"", "", "Propagation Status", prop.RespStat.PropagationStatus})
+				rows = append(rows, []string{"", "", "Propagation Status Date", prop.RespStat.PropagationStatusDate})
 			}
 		}
 	} else {
 		if len(succShortArray) == 0 {
-			outString.WriteString("  (none)\n")
+			rows = append(rows, []string{"", "No successful updates", "", ""})
 		} else {
 			for _, prop := range succShortArray {
-				outString.WriteString(fmt.Sprintf("  %s (%s)\n", prop.PropName, prop.ChangeId))
+				rows = append(rows, []string{"", prop.PropName, "ChangeId", prop.ChangeId})
 			}
 		}
 	}
 
 	// Failed Updates
-	outString.WriteString("Failed Updates:\n")
+	rows = append(rows, []string{"Failed Updates", "", "", ""})
 	if len(failedArray) == 0 {
-		outString.WriteString("  (none)\n")
+		rows = append(rows, []string{"", "No failed property updates", "", ""})
 	} else {
 		for _, prop := range failedArray {
-			outString.WriteString(fmt.Sprintf("  %s: %s\n", prop.PropName, prop.FailMsg))
+			rows = append(rows, []string{"", prop.PropName, "Failure Message", prop.FailMsg})
 		}
 	}
 
+	outString.WriteString(renderBorderlessRows(rows))
+	return outString.String()
+}
+
+func renderBorderlessRows(rows [][]string) string {
+	widths := make([]int, 4)
+	for _, row := range rows {
+		for i, cell := range row {
+			if len(cell) > widths[i] {
+				widths[i] = len(cell)
+			}
+		}
+	}
+
+	var outString strings.Builder
+	for _, row := range rows {
+		var line strings.Builder
+		for i, cell := range row {
+			if i > 0 {
+				line.WriteString(" ")
+			}
+			line.WriteString(" ")
+			line.WriteString(cell)
+			line.WriteString(strings.Repeat(" ", widths[i]-len(cell)))
+			line.WriteString(" ")
+		}
+		outString.WriteString(strings.TrimRight(line.String(), " "))
+		outString.WriteString("\n")
+	}
 	return outString.String()
 }

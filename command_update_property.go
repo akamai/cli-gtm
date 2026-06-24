@@ -150,7 +150,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if err != nil {
 		return failStep(updateStep, "Property not found: "+err.Error())
 	}
-	printOK(updateStep)
 
 	changes_made := false
 	trafficTargets := property.TrafficTargets
@@ -158,7 +157,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if !c.IsSet("json") {
 		fmt.Println(targetsmsg)
 	}
-	trafficTargetsStep := "Updating Traffic Targets"
+	printOK("Updating Traffic Targets")
 	var propTargets = map[int]string{}
 	//for _, traffTarg := range trafficTargets {
 	for i := range property.TrafficTargets {
@@ -210,9 +209,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterID == dcID {
-				if !c.IsSet("json") {
-					fmt.Printf("%s contains dc %s\n", traffTarg.Name, strconv.Itoa(dcID))
-				}
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
 					traffTarg.Enabled = pEnabled
 					changes_made = true
@@ -273,9 +269,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 		if pDryrun {
 			json, err := json.MarshalIndent(property, "", "  ")
 			if err != nil {
-				return failStep(trafficTargetsStep, "Unable to display proposed property update")
+				return failStep(updateStep, "Unable to display proposed property update")
 			}
-			printOK(trafficTargetsStep)
 			fmt.Fprintln(c.App.Writer, "Proposed Property Update")
 			fmt.Fprintln(c.App.Writer, string(json))
 
@@ -295,9 +290,8 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		propStat, err := gtmClient.UpdateProperty(ctx, updateReq)
 		if err != nil {
-			return failStep(trafficTargetsStep, "Error updating property %s. %s", propertyName, err.Error())
+			return failStep(updateStep, "Error updating property %s. %s", propertyName, err.Error())
 		}
-		printOK(trafficTargetsStep)
 		if pComplete && propStat.Status.PropagationStatus == "PENDING" {
 			sleepInterval := time.Duration(defaultInterval) * time.Second
 			sleepTimeout := time.Duration(pTimeout) * time.Second
@@ -310,9 +304,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 				sleepTimeout -= sleepInterval
 
 				if propStat.Status.PropagationStatus == "COMPLETE" {
-					if !c.IsSet("json") {
-						fmt.Println("[Change deployed]")
-					}
 					completionOK = true
 					break
 				} else if propStat.Status.PropagationStatus == "DENIED" {
@@ -345,6 +336,9 @@ func cmdUpdateProperty(c *cli.Context) error {
 			}
 			if completionOK {
 				printOK(completionStep)
+				if !c.IsSet("json") {
+					fmt.Println("[Change deployed]")
+				}
 			}
 		}
 
