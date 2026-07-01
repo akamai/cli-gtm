@@ -3,7 +3,6 @@ package edgegrid
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,27 +12,12 @@ import (
 	"github.com/urfave/cli"
 )
 
-func expandHome(path string) string {
-	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(home, path[1:])
-		}
-		// If error getting home, just return path as-is
-	}
-	return path
-}
-
 // Loads Edgegrid config from env, file or CLI flags
 func GetEdgegridConfig(c *cli.Context) (*edgegrid.Config, error) {
-	edgercPath := expandHome(GetEdgercPath(c))
-	section := GetEdgercSection(c)
-	//accountKey := c.GlobalString("accountkey")
-
 	edgercOps := []edgegrid.Option{
 		edgegrid.WithEnv(true),
-		edgegrid.WithFile(edgercPath),
-		edgegrid.WithSection(section),
+		edgegrid.WithFile(GetEdgercPath(c)), // SDK handles ~ expansion
+		edgegrid.WithSection(GetEdgercSection(c)),
 	}
 	config, err := edgegrid.New(edgercOps...)
 	if err != nil {
@@ -98,14 +82,13 @@ func getRetryConfig() (*session.RetryConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid AKAMAI_RETRY_WAIT_MAX: %w", err)
 		}
-		conf.RetryWaitMin = time.Duration(sec) * time.Second
+		conf.RetryWaitMax = time.Duration(sec) * time.Second
 	}
 
 	if excluded, ok := os.LookupEnv("AKAMAI_RETRY_EXCLUDED_ENDPOINTS"); ok {
 		conf.ExcludedEndpoints = strings.Split(excluded, ",")
-	} else {
-		conf.ExcludedEndpoints = []string{"/identity-management/v3/user-admin/ui-identities/*"}
 	}
+	// Otherwise keep SDK default (empty slice - retry all endpoints)
 
 	return &conf, nil
 }
