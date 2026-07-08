@@ -534,16 +534,10 @@ func gatherPropertyStatus(c *cli.Context) (*PropertyStatus, error) {
 
 // worker function for query-status
 func cmdQueryStatus(c *cli.Context) error {
-	failStep := func(step, message string, args ...interface{}) error {
-		if !c.IsSet("json") {
-			fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
-		}
-		return cli.NewExitError(color.RedString(message, args...), 1)
-	}
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
-		return failStep("Querying status", "domain is required")
+		return FailStep(c, "Querying status", "domain is required")
 	}
 
 	domainName = c.Args().Get(0)
@@ -556,14 +550,14 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 
 	if c.IsSet("property") && c.IsSet("datacenter") {
-		return failStep("Querying status", "property OR datacenter(s) must be specified")
+		return FailStep(c, "Querying status", "property OR datacenter(s) must be specified")
 	}
 	err := ParseNicknames(c, qsDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
-			return failStep("Querying status", "Unable to retrieve datacenter list. "+err.Error())
+			return FailStep(c, "Querying status", "Unable to retrieve datacenter list. "+err.Error())
 		} else {
-			return failStep("Querying status", "Unable to retrieve datacenter.")
+			return FailStep(c, "Querying status", "Unable to retrieve datacenter.")
 		}
 	}
 	if !c.IsSet("json") {
@@ -578,9 +572,9 @@ func cmdQueryStatus(c *cli.Context) error {
 		objStatus, err = gatherDatacenterStatus(c)
 		if err != nil {
 			if verboseStatus {
-				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
 			} else {
-				return failStep(statusStep, "Unable to retrieve status.")
+				return FailStep(c, statusStep, "Unable to retrieve status.")
 			}
 		}
 		if !c.IsSet("json") {
@@ -591,9 +585,9 @@ func cmdQueryStatus(c *cli.Context) error {
 		objStatus, err = gatherPropertyStatus(c)
 		if err != nil {
 			if verboseStatus {
-				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
 			} else {
-				return failStep(statusStep, "Unable to retrieve status.")
+				return FailStep(c, statusStep, "Unable to retrieve status.")
 			}
 		}
 		if !c.IsSet("json") {
@@ -603,9 +597,9 @@ func cmdQueryStatus(c *cli.Context) error {
 		objStatus, err = getDomainStatus(c)
 		if err != nil {
 			if verboseStatus {
-				return failStep(statusStep, "Unable to retrieve status. "+err.Error())
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
 			} else {
-				return failStep(statusStep, "Unable to retrieve status.")
+				return FailStep(c, statusStep, "Unable to retrieve status.")
 			}
 		}
 		if !c.IsSet("json") {
@@ -616,7 +610,7 @@ func cmdQueryStatus(c *cli.Context) error {
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
 		if err != nil {
-			return failStep(statusStep, "Unable to display status results")
+			return FailStep(c, statusStep, "Unable to display status results")
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 	} else {

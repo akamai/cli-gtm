@@ -15,6 +15,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
 )
@@ -90,4 +92,11 @@ func setHelpTemplates() {
 			"{{range .Subcommands}}   {{.Name}}\n{{end}}{{end}}"
 
 	cli.SubcommandHelpTemplate = cli.CommandHelpTemplate
+}
+
+func FailStep(c *cli.Context, step, message string, args ...any) error {
+	if !c.IsSet("json") {
+		fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
+	}
+	return cli.NewExitError(color.RedString(message, args...), 1)
 }

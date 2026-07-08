@@ -41,12 +41,6 @@ var dryrunArray []json.RawMessage
 
 // worker function for update-datacenter
 func cmdUpdateDatacenter(c *cli.Context) error {
-	failStep := func(step, message string, args ...interface{}) error {
-		if !c.IsSet("json") {
-			fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
-		}
-		return cli.NewExitError(color.RedString(message, args...), 1)
-	}
 	printOK := func(step string) {
 		if !c.IsSet("json") {
 			fmt.Printf("%s ... %s\n", step, color.GreenString("[OK]"))
@@ -73,7 +67,7 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 	updateStep := fmt.Sprintf("Updating Datacenter(s) in domain %s", domainName)
 	dcDatacenters = c.Generic("datacenter").(*arrayFlags)
 	if c.IsSet("enable") && c.IsSet("disable") {
-		return failStep(updateStep, "must specify either enable or disable.")
+		return FailStep(c, updateStep, "must specify either enable or disable.")
 	} else if c.IsSet("enable") {
 		dcEnabled = true
 	} else if c.IsSet("disable") {
@@ -98,17 +92,17 @@ func cmdUpdateDatacenter(c *cli.Context) error {
 		if verboseStatus {
 			msg += " " + err.Error()
 		}
-		return failStep(updateStep, msg)
+		return FailStep(c, updateStep, msg)
 	}
 	if len(dcDatacenters.flagList) == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
-		return failStep(updateStep, "One or more datacenters is required")
+		return FailStep(c, updateStep, "One or more datacenters is required")
 	}
 
 	// 1. List all properties in given domain
 	properties, err := gtmClient.ListProperties(ctx, gtm.ListPropertiesRequest{DomainName: domainName})
 	if err != nil {
-		return failStep(updateStep, "Unable to list properties: "+err.Error())
+		return FailStep(c, updateStep, "Unable to list properties: "+err.Error())
 	}
 	printOK(updateStep)
 	propmsg := fmt.Sprintf("%s contains %d properties", domainName, len(properties))
