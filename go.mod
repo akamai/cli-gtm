@@ -1,6 +1,6 @@
 module cli-gtm
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/akamai/AkamaiOPEN-edgegrid-golang/v13 v13.3.0
