@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -35,6 +35,11 @@ const defaultTimeout int = 300
 
 // worker function for update-property
 func cmdUpdateProperty(c *cli.Context) error {
+	printOK := func(step string) {
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", step, color.GreenString("[OK]"))
+		}
+	}
 
 	var pWeight float64
 	var pTargets *TargetFlags
@@ -65,12 +70,13 @@ func cmdUpdateProperty(c *cli.Context) error {
 	propertyName := c.Args().Get(1)
 
 	// Changes may be to enabled, weight or servers
+	updateStep := fmt.Sprintf("Updating property %s", propertyName)
 	pWeight = c.Float64("weight")
 	pServers = c.StringSlice("server")
 	pLivenessTests = c.StringSlice("liveness_test")
 	fmt.Println("pLivenessTests: ", pLivenessTests)
 	if c.IsSet("enable") && c.IsSet("disable") {
-		return cli.NewExitError(color.RedString("must specified either enable or disable."), 1)
+		return FailStep(c, updateStep, "must specified either enable or disable.")
 	} else if c.IsSet("enable") {
 		pEnabled = true
 	} else if c.IsSet("disable") {
@@ -91,45 +97,42 @@ func cmdUpdateProperty(c *cli.Context) error {
 		pTimeout = c.Int("timeout")
 	}
 	if c.IsSet("datacenter") && c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("enable/disable can only be applied to either datacenter(s) OR liveness_test(s)"), 1)
+		return FailStep(c, updateStep, "enable/disable can only be applied to either datacenter(s) OR liveness_test(s)")
 	}
 	if !c.IsSet("target") && !c.IsSet("datacenter") && !c.IsSet("liveness_test") {
-		return cli.NewExitError(color.RedString("datacenter(s), target(s) and/or liveness_test(s)s must be specified"), 1)
+		return FailStep(c, updateStep, "datacenter(s), target(s) and/or liveness_test(s)s must be specified")
 	}
 	// if nicknames specified, add to dcFlags
 	err = ParseNicknames(c, pDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+			return FailStep(c, updateStep, "Unable to retrieve datacenter list. "+err.Error())
 		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+			return FailStep(c, updateStep, "Unable to retrieve datacenter.")
 		}
 	}
 	if !c.IsSet("datacenter") && !c.IsSet("liveness_test") && (c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("datacenter(s) or liveness_test(s) must be specified when enable or disable are specified"), 1)
+		return FailStep(c, updateStep, "datacenter(s) or liveness_test(s) must be specified when enable or disable are specified")
 	}
 	if !c.IsSet("datacenter") && (c.IsSet("server") || c.IsSet("weight")) {
-		return cli.NewExitError(color.RedString("datacenter(s) must be specified when server or weight field changes are specified"), 1)
+		return FailStep(c, updateStep, "datacenter(s) must be specified when server or weight field changes are specified")
 	}
 	if c.IsSet("liveness_test") && !(c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("liveness_test(s) specified without enable or disable directive"), 1)
+		return FailStep(c, updateStep, "liveness_test(s) specified without enable or disable directive")
 	}
 	if c.IsSet("datacenter") && !(c.IsSet("server") || c.IsSet("weight") || c.IsSet("enable") || c.IsSet("disable")) {
-		return cli.NewExitError(color.RedString("datacenter(s) specified with no field changes"), 1)
+		return FailStep(c, updateStep, "datacenter(s) specified with no field changes")
 	}
 	for _, dcID := range pDatacenters.flagList {
 		if _, ok := pTargets.targetList[dcID]; ok {
-			return cli.NewExitError(color.RedString("datacenters and targets cannot be the same"), 1)
+			return FailStep(c, updateStep, "datacenters and targets cannot be the same")
 		}
 	}
 	if c.IsSet("server") && len(pDatacenters.flagList) > 1 {
-		return cli.NewExitError(color.RedString("server update may only apply to one datacenter"), 1)
+		return FailStep(c, updateStep, "server update may only apply to one datacenter")
 	}
 	if c.IsSet("weight") && len(pDatacenters.flagList) > 1 {
-		return cli.NewExitError(color.RedString("weight update may only apply to one datacenter"), 1)
-	}
-	if c.IsSet("json") {
-		fmt.Println(fmt.Sprintf("Updating property %s", propertyName))
+		return FailStep(c, updateStep, "weight update may only apply to one datacenter")
 	}
 
 	req := gtm.GetPropertyRequest{
@@ -139,7 +142,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	property, err := gtmClient.GetProperty(ctx, req)
 	if err != nil {
-		return cli.NewExitError(color.RedString("Property not found: "+err.Error()), 1)
+		return FailStep(c, updateStep, "Property not found: "+err.Error())
 	}
 
 	changes_made := false
@@ -148,8 +151,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 	if !c.IsSet("json") {
 		fmt.Println(targetsmsg)
 	}
-	fmt.Sprintf(targetsmsg)
-	fmt.Println("Updating Traffic Targets ", "")
+	printOK("Updating Traffic Targets")
 	var propTargets = map[int]string{}
 	//for _, traffTarg := range trafficTargets {
 	for i := range property.TrafficTargets {
@@ -201,7 +203,6 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		for _, dcID := range pDatacenters.flagList {
 			if traffTarg.DatacenterID == dcID {
-				fmt.Sprintf("%s contains dc %s", traffTarg.Name, strconv.Itoa(dcID))
 				if (c.IsSet("enable") || c.IsSet("disable")) && traffTarg.Enabled != pEnabled {
 					traffTarg.Enabled = pEnabled
 					changes_made = true
@@ -221,7 +222,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 	if c.IsSet("target") {
 		// Any new target?
-		for cmdTarget, _ := range pTargets.targetList {
+		for cmdTarget := range pTargets.targetList {
 			if _, ok := propTargets[cmdTarget]; !ok {
 				// New target. Find it
 				for _, t := range pTargets.targets {
@@ -262,7 +263,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 		if pDryrun {
 			json, err := json.MarshalIndent(property, "", "  ")
 			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display proposed property update"), 1)
+				return FailStep(c, updateStep, "Unable to display proposed property update")
 			}
 			fmt.Fprintln(c.App.Writer, "Proposed Property Update")
 			fmt.Fprintln(c.App.Writer, string(json))
@@ -283,28 +284,25 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 		propStat, err := gtmClient.UpdateProperty(ctx, updateReq)
 		if err != nil {
-			return cli.NewExitError(color.RedString(fmt.Sprintf("Error updating property %s. %s", propertyName, err.Error())), 1)
+			return FailStep(c, updateStep, "Error updating property %s. %s", propertyName, err.Error())
 		}
-
 		if pComplete && propStat.Status.PropagationStatus == "PENDING" {
 			sleepInterval := time.Duration(defaultInterval) * time.Second
 			sleepTimeout := time.Duration(pTimeout) * time.Second
 
-			if !c.IsSet("json") {
-				fmt.Println("\nWaiting for completion...")
-			}
+			completionStep := "Waiting for completion"
+			completionOK := false
 
 			for {
 				time.Sleep(sleepInterval)
 				sleepTimeout -= sleepInterval
 
 				if propStat.Status.PropagationStatus == "COMPLETE" {
-					if !c.IsSet("json") {
-						fmt.Println("[Change deployed]")
-					}
+					completionOK = true
 					break
 				} else if propStat.Status.PropagationStatus == "DENIED" {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Change denied]")
 					}
 					break
@@ -312,6 +310,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 
 				if sleepTimeout <= 0 {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Maximum wait time elapsed. Use query-status to confirm successful deployment]")
 					}
 					break
@@ -320,6 +319,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 				domainStatus, err := gtmClient.GetDomainStatus(ctx, gtm.GetDomainStatusRequest{DomainName: domainName})
 				if err != nil {
 					if !c.IsSet("json") {
+						fmt.Printf("%s ... %s\n", completionStep, color.RedString("[FAIL]"))
 						fmt.Println("[Unable to retrieve domain status]")
 					}
 					break
@@ -328,10 +328,16 @@ func cmdUpdateProperty(c *cli.Context) error {
 				// domainStatus is a ResponseStatus type, so update propStat.Status
 				propStat.Status = (*gtm.ResponseStatus)(domainStatus)
 			}
+			if completionOK {
+				printOK(completionStep)
+				if !c.IsSet("json") {
+					fmt.Println("[Change deployed]")
+				}
+			}
 		}
 
 		if c.IsSet("json") {
-			fmt.Fprintln(c.App.Writer, fmt.Sprintf("Property %s updated", propertyName))
+			fmt.Fprintf(c.App.Writer, "Property %s updated\n", propertyName)
 		}
 
 		if c.IsSet("json") && c.Bool("json") {
@@ -343,22 +349,22 @@ func cmdUpdateProperty(c *cli.Context) error {
 			}
 			jsonOut, err := json.MarshalIndent(jsonStatus, "", "  ")
 			if err != nil {
-				return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+				return FailStep(c, updateStep, "Unable to display status results")
 			}
 			fmt.Fprintln(c.App.Writer, string(jsonOut))
 		} else {
 			fmt.Fprintln(c.App.Writer, "")
 			if c.IsSet("verbose") && verboseStatus {
-				fmt.Fprintln(c.App.Writer, renderStatus(*propStat.Status, c))
+				fmt.Fprintln(c.App.Writer, renderStatus(*propStat.Status))
 			} else {
 				fmt.Fprintln(c.App.Writer, "Response Status")
 				fmt.Fprintln(c.App.Writer, " ")
-				fmt.Fprintln(c.App.Writer, fmt.Sprintf("ChangeId: %s", propStat.Status.ChangeID))
+				fmt.Fprintf(c.App.Writer, "ChangeId: %s\n", propStat.Status.ChangeID)
 			}
 		}
 	} else {
 		if !c.IsSet("json") {
-			fmt.Fprintln(c.App.Writer, fmt.Sprintf("No update required for Property %s", propertyName))
+			fmt.Fprintf(c.App.Writer, "No update required for Property %s\n", propertyName)
 		}
 	}
 
@@ -367,7 +373,7 @@ func cmdUpdateProperty(c *cli.Context) error {
 }
 
 // Pretty print output
-func renderStatus(status gtm.ResponseStatus, c *cli.Context) string {
+func renderStatus(status gtm.ResponseStatus) string {
 
 	var outString string
 	outString += fmt.Sprintln(" ")
@@ -375,15 +381,6 @@ func renderStatus(status gtm.ResponseStatus, c *cli.Context) string {
 	outString += fmt.Sprintln(" ")
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
 	rowData := []string{"ChangeId", status.ChangeID}

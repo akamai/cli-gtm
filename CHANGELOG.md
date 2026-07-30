@@ -1,5 +1,15 @@
 # Release Notes
 
+## Version 0.7.0 
+
+### Features/Enhancements
+
+* Upgrade to Edgegrid v13.3.0
+* Update project license file
+* Migrate to go 1.26.5
+* Standardize command status/failure messaging ([OK/FAIL]) 
+* Standardize table rendering format for enhanced readability.
+
 ## Version 0.6.0 (January 2026)
 
 ### Features/Enhancements
