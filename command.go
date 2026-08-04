@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
 	"github.com/urfave/cli"
 )
 
@@ -128,12 +128,14 @@ func (t *TargetFlags) Set(value string) error {
 
 func parseBoolString(val string) (bool, error) {
 	boolVal := strings.ToLower(val)
-	if boolVal == "true" {
+	switch boolVal {
+	case "true":
 		return true, nil
-	} else if boolVal == "false" {
+	case "false":
 		return false, nil
+	default:
+		return true, errors.New("Invalid value provided. Acceptable values: true, false")
 	}
-	return true, errors.New("Invalid value provided. Acceptable values: true, false")
 }
 
 func GetCommands() []cli.Command {

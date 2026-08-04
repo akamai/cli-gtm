@@ -26,8 +26,8 @@ import (
 	"cli-gtm/edgegrid"
 	"cli-gtm/reportsgtm"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/gtm"
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/session"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/gtm"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/session"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -537,7 +537,7 @@ func cmdQueryStatus(c *cli.Context) error {
 
 	if c.NArg() == 0 {
 		cli.ShowCommandHelp(c, c.Command.Name)
-		return cli.NewExitError(color.RedString("domain is required"), 1)
+		return FailStep(c, "Querying status", "domain is required")
 	}
 
 	domainName = c.Args().Get(0)
@@ -550,51 +550,67 @@ func cmdQueryStatus(c *cli.Context) error {
 	}
 
 	if c.IsSet("property") && c.IsSet("datacenter") {
-		return cli.NewExitError(color.RedString("property OR datacenter(s) must be specified"), 1)
+		return FailStep(c, "Querying status", "property OR datacenter(s) must be specified")
 	}
 	err := ParseNicknames(c, qsDatacenters.nicknamesList, domainName)
 	if err != nil {
 		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter list. "+err.Error()), 1)
+			return FailStep(c, "Querying status", "Unable to retrieve datacenter list. "+err.Error())
 		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve datacenter."), 1)
+			return FailStep(c, "Querying status", "Unable to retrieve datacenter.")
 		}
 	}
 	if !c.IsSet("json") {
-		fmt.Println("Querying status")
+		fmt.Printf("Querying status ... %s\n", color.GreenString("[OK]"))
 	}
 
 	var objStatus interface{}
+	statusStep := "Collecting Domain status"
 
 	if c.IsSet("datacenter") {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting DC status ", "")
-		}
+		statusStep = "Collecting DC status"
 		objStatus, err = gatherDatacenterStatus(c)
+		if err != nil {
+			if verboseStatus {
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return FailStep(c, statusStep, "Unable to retrieve status.")
+			}
+		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
+		}
 	} else if c.IsSet("property") {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting Property status ", "")
-		}
+		statusStep = "Collecting Property status"
 		objStatus, err = gatherPropertyStatus(c)
-	} else {
-		if !c.IsSet("json") {
-			fmt.Println("Collecting Domain status ", "")
+		if err != nil {
+			if verboseStatus {
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return FailStep(c, statusStep, "Unable to retrieve status.")
+			}
 		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
+		}
+	} else {
 		objStatus, err = getDomainStatus(c)
-	}
-	// check for failure
-	if err != nil {
-		if verboseStatus {
-			return cli.NewExitError(color.RedString("Unable to retrieve status. "+err.Error()), 1)
-		} else {
-			return cli.NewExitError(color.RedString("Unable to retrieve status."), 1)
+		if err != nil {
+			if verboseStatus {
+				return FailStep(c, statusStep, "Unable to retrieve status. "+err.Error())
+			} else {
+				return FailStep(c, statusStep, "Unable to retrieve status.")
+			}
+		}
+		if !c.IsSet("json") {
+			fmt.Printf("%s ... %s\n", statusStep, color.GreenString("[OK]"))
 		}
 	}
 
 	if c.IsSet("json") && c.Bool("json") {
 		json, err := json.MarshalIndent(objStatus, "", "  ")
 		if err != nil {
-			return cli.NewExitError(color.RedString("Unable to display status results"), 1)
+			return FailStep(c, statusStep, "Unable to display status results")
 		}
 		fmt.Fprintln(c.App.Writer, string(json))
 	} else {
@@ -602,16 +618,16 @@ func cmdQueryStatus(c *cli.Context) error {
 		fmt.Fprintln(c.App.Writer, "")
 		if c.IsSet("datacenter") {
 
-			fmt.Fprintln(c.App.Writer, renderDatacenterTable(objStatus.(*DCTrafficStati), c))
+			fmt.Fprintln(c.App.Writer, renderDatacenterTable(objStatus.(*DCTrafficStati)))
 
 		} else if c.IsSet("property") {
 
-			fmt.Fprintln(c.App.Writer, renderPropertyTable(objStatus.(*PropertyStatus), c))
+			fmt.Fprintln(c.App.Writer, renderPropertyTable(objStatus.(*PropertyStatus)))
 
 		} else {
 			//fmt.Fprintln(c.App.Writer, renderDomainTable(objStatus.(*gtm.ResponseStatus), c))
 			statusResp := objStatus.(*gtm.GetDomainStatusResponse)
-			fmt.Fprintln(c.App.Writer, renderDomainTable((*gtm.ResponseStatus)(statusResp), c))
+			fmt.Fprintln(c.App.Writer, renderDomainTable((*gtm.ResponseStatus)(statusResp)))
 		}
 	}
 
@@ -620,7 +636,7 @@ func cmdQueryStatus(c *cli.Context) error {
 }
 
 // Generate pretty print DC status
-func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
+func renderDatacenterTable(objStatus *DCTrafficStati) string {
 
 	var outString string
 	outString += fmt.Sprintln("Domain: ", objStatus.Domain)
@@ -630,15 +646,7 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
 
-	table.SetHeader([]string{"Datacenter", "Nickname", "Timestamp", "Property", "Enabled", "Requests", "Status"})
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
+	table.Header("Datacenter", "Nickname", "Timestamp", "Property", "Enabled", "Requests", "Status")
 
 	dclid := " "
 	dcln := " "
@@ -679,7 +687,7 @@ func renderDatacenterTable(objStatus *DCTrafficStati, c *cli.Context) string {
 
 }
 
-func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
+func renderPropertyTable(objStatus *PropertyStatus) string {
 	var outString string
 
 	outString += fmt.Sprintln("Domain: ", objStatus.Domain)
@@ -694,19 +702,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	outString += fmt.Sprintln("Status Summary -- Last Update: ", objStatus.StatusSummary.LastUpdate, ", CutOff: ", objStatus.StatusSummary.CutOff)
 	outString += fmt.Sprintln(" ")
 
-	table.SetHeader([]string{"Datacenter", "Nickname", "Target Name", "Enabled", "Weight", "Total Requests", "Property Usage", "IP", "State"})
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{
-		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT,
-		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_CENTER,
-		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_CENTER,
-	})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
+	table.Header("Datacenter", "Nickname", "Target Name", "Enabled", "Weight", "Total Requests", "Property Usage", "IP", "State")
 
 	if len(objStatus.StatusSummary.PropertyDCStatus) == 0 {
 		rowData := []string{"No status summary data available", " ", " ", " ", " ", " ", " ", " ", " "}
@@ -766,19 +762,7 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 	tableString = &strings.Builder{}
 	dcTable := tablewriter.NewWriter(tableString)
 
-	dcTable.SetHeader([]string{"Timestamp", "Datacenter", "Nickname", "Requests", "Status"})
-	dcTable.SetReflowDuringAutoWrap(false)
-	dcTable.SetCenterSeparator(" ")
-	dcTable.SetColumnSeparator(" ")
-	dcTable.SetRowSeparator(" ")
-	dcTable.SetBorder(false)
-	dcTable.SetAutoWrapText(false)
-	dcTable.SetColumnAlignment([]int{
-		tablewriter.ALIGN_CENTER, tablewriter.ALIGN_LEFT,
-		tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER,
-		tablewriter.ALIGN_CENTER,
-	})
-	dcTable.SetAlignment(tablewriter.ALIGN_CENTER)
+	dcTable.Header("Timestamp", "Datacenter", "Nickname", "Requests", "Status")
 
 	if len(objStatus.DatacenterIntervalStatus) == 0 {
 		dcTable.Append([]string{"No datacenter interval status available", " ", " ", " ", " "})
@@ -807,24 +791,15 @@ func renderPropertyTable(objStatus *PropertyStatus, c *cli.Context) string {
 }
 
 // Pretty print output
-func renderDomainTable(status *gtm.ResponseStatus, c *cli.Context) string {
+func renderDomainTable(status *gtm.ResponseStatus) string {
 
 	var outString string
 	outString += fmt.Sprintln(" ")
-	outString += fmt.Sprintln(fmt.Sprintf("Domain: %s", domainName))
+	outString += fmt.Sprintf("Domain: %s\n", domainName)
 	outString += fmt.Sprintln("Current Status")
 	outString += fmt.Sprintln(" ")
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-
-	table.SetReflowDuringAutoWrap(false)
-	table.SetCenterSeparator(" ")
-	table.SetColumnSeparator(" ")
-	table.SetRowSeparator(" ")
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
-	table.SetAlignment(tablewriter.ALIGN_CENTER)
 
 	// Build status table. Exclude Links.
 	rowData := []string{"ChangeId", status.ChangeID}

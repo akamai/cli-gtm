@@ -15,6 +15,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
 )
@@ -23,9 +25,9 @@ func setHelpTemplates() {
 	cli.AppHelpTemplate =
 		color.YellowString("Usage: \n") +
 			`{{if or (or (eq .HelpName "akamai-gtm update-datacenter") (eq .HelpName "akamai gtm update-datacenter")) (or (eq .HelpName "akamai-gtm update-property") (eq .HelpName "akamai gtm update-property")) (or (eq .HelpName "akamai-gtm query-status") (eq .HelpName "akamai gtm query-status"))}}` +
-			color.BlueString(`	{{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}}{{if .ArgsUsage}} {{.ArgsUsage}}{{end}}{{end}}`) +
+			color.BlueString(`  {{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}}{{if .ArgsUsage}} {{.ArgsUsage}}{{end}}{{end}}`) + "\n" +
 			`{{else}}` +
-			color.BlueString(`	{{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}}{{if .VisibleFlags}}{{range .VisibleFlags}} [--{{.Name}}]{{end}}{{end}}{{if .ArgsUsage}} {{.ArgsUsage}}{{end}}{{if .Commands}} <command> [sub-command]{{end}}{{end}}`) +
+			color.BlueString(`  {{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}}{{if .VisibleFlags}}{{range .VisibleFlags}} [--{{.Name}}]{{end}}{{end}}{{if .ArgsUsage}} {{.ArgsUsage}}{{end}}{{if .Commands}} <command> [sub-command]{{end}}{{end}}`) + "\n" +
 			`{{end}}` +
 
 			"{{if .Description}}\n\n" +
@@ -90,4 +92,11 @@ func setHelpTemplates() {
 			"{{range .Subcommands}}   {{.Name}}\n{{end}}{{end}}"
 
 	cli.SubcommandHelpTemplate = cli.CommandHelpTemplate
+}
+
+func FailStep(c *cli.Context, step, message string, args ...any) error {
+	if !c.IsSet("json") {
+		fmt.Printf("%s ... %s\n", step, color.RedString("[FAIL]"))
+	}
+	return cli.NewExitError(color.RedString(message, args...), 1)
 }

@@ -20,7 +20,7 @@ for your system, or by cloning this repository and compiling it yourself.
 
 ### Compiling from Source
 
-If you want to compile it from source, you will need Go 1.25 or later:
+If you want to compile it from source, you will need Go 1.26.5 or later:
 
 1. Create a clone of the target repository:  
   `git clone https://github.com/akamai/cli-gtm.git`
@@ -31,7 +31,7 @@ If you want to compile it from source, you will need Go 1.25 or later:
 ## Usage
 
 ```
-  akamai-gtm [--edgerc] [--section] <command> [sub-command]
+$ akamai-gtm [--edgerc] [--section] <command> [sub-command]
 
 Description:
    Manage GTM Domains and assoc objects
@@ -102,7 +102,7 @@ Flags:
 
 #### Target modifications
 
-Property targets may be modified or added to properties by using the `target` argument. An example is provided in the following Examples section. The tool will modify the fields specified only. The target value is valid json. Mispselled field names will be ignored, possibly leading to and invalid target configuration. Valid fields are:
+Property targets may be modified or added to properties by using the `target` argument. An example is provided in the following Examples section. The tool will modify the fields specified only. The target value is valid json. Misspelled field names will be ignored, possibly leading to an invalid target configuration. Valid fields are:
 
 * datacenterId: int - Required
 * weight: float64 - Required
@@ -140,18 +140,57 @@ To enable one or more datacenters references in all property targets:
 $ akamai gtm update-datacenter example.akadns.net --datacenter 3131 --datacenter 3132 --enable
 ```
 
+would result in the following output:
+
+```
+Updating Datacenter(s) in domain example.akadns.net ... [OK]
+example.akadns.net contains 1 properties
+Updating Property: testproperty ... [OK]
+testproperty contains 3 targets
+Datacenter Update Summary
+
+ Completed Updates
+                     testproperty                ChangeId   5718f0f2-571a-419f-b6b8-e3479572fee3
+ Failed Updates
+                     No failed property updates
+```
+
 ### Update traffic target in property
 
-To enable a traffic target in a property:
+To disable a traffic target in a property:
 
 ```
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --disable
 ```
 
-To modify a property target's weight:                                    
+would result in the following output:
+
+```
+pLivenessTests:  []
+testproperty contains 3 targets
+Updating Traffic Targets ... [OK]
+
+Response Status
+ 
+ChangeId: 52e7d69f-027e-4500-af2b-e5672cb2dccc
+```
+
+To modify a property target's weight:
 
 ```
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --weight 20
+```
+
+would result in the following output:
+
+```
+pLivenessTests:  []
+testproperty contains 3 targets
+Updating Traffic Targets ... [OK]
+
+Response Status
+ 
+ChangeId: 379f34e9-d987-4455-8127-39b27227cbfe
 ```
 
 To modify a property target's servers:
@@ -160,10 +199,110 @@ To modify a property target's servers:
 $ akamai gtm update-property example.akadns.net testproperty --datacenter 3131 --server 1.2.3.6 --server 1.2.1.1
 ```
 
+would result in the following output:
+
+```
+pLivenessTests:  []
+testproperty contains 3 targets
+Updating Traffic Targets ... [OK]
+
+Response Status
+ 
+ChangeId: 2e7ffe58-8492-43fe-a2cc-ff24d36c899e
+
+```
+
 To modify (3131) and add (3134) property traffic targets:
 
 ```
 $ akamai gtm update-property test_property.com.akadns.net targettest --dryrun --target '{"datacenterId": 3131,"weight":30,"enabled":true,"servers":["1.5.6.7"]}' --target '{"datacenterId": 3134,"weight":30,"enabled":true,"servers":["1.5.6.8"]}'
+```
+
+would result in the following output:
+
+```
+pLivenessTests:  []
+test_property contains 3 targets
+Updating Traffic Targets ... [OK]
+Proposed Property Update
+{
+  "name": "targettest",
+  "type": "weighted-round-robin",
+  "ipv6": false,
+  "scoreAggregationType": "mean",
+  "stickinessBonusPercentage": 50,
+  "useComputedTargets": false,
+  "balanceByDownloadScore": false,
+  "lastModified": "2026-07-08T08:03:17.360+00:00",
+  "dynamicTTL": 300,
+  "handoutLimit": 8,
+  "handoutMode": "normal",
+  "loadImbalancePercentage": 10,
+  "ghostDemandReporting": false,
+  "cname": "www.example.com",
+  "trafficTargets": [
+    {
+      "datacenterId": 3131,
+      "enabled": true,
+      "weight": 30,
+      "servers": [
+        "1.5.6.7"
+      ]
+    },
+    {
+      "datacenterId": 3132,
+      "enabled": true,
+      "weight": 25,
+      "servers": [
+        "1.2.3.1"
+      ],
+    },
+    {
+      "datacenterId": 3133,
+      "enabled": true,
+      "weight": 45,
+      "servers": [
+        "1.1.3.1"
+      ],
+    },
+    {
+      "datacenterId": 3134,
+      "enabled": true,
+      "weight": 30,
+      "servers": [
+        "1.5.6.8"
+      ]
+    }
+  ],
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://<akamai-host>/config-gtm/v1/domains/test_property.com.akadns.net/properties/targettest"
+    }
+  ],
+  "livenessTests": [
+    {
+      "name": "health check",
+      "peerCertificateVerification": false,
+      "testInterval": 60,
+      "testObject": "/status",
+      "httpError3xx": true,
+      "httpError4xx": true,
+      "httpError5xx": true,
+      "httpMethod": "GET",
+      "httpRequestBody": null,
+      "disabled": true,
+      "testObjectProtocol": "HTTP",
+      "testObjectPort": 80,
+      "pre2023SecurityPosture": false,
+      "disableNonstandardPortWarning": false,
+      "testTimeout": 25,
+      "answersRequired": false,
+      "recursionRequested": false,
+      "alternateCACertificates": []
+    }
+  ]
+}
 ```
 
 Note: On Windows platforms, use double quotes to enclose the target JSON string and escape the double quotes within the JSON. E.g.
@@ -180,18 +319,107 @@ To disable a liveness test in a property:
 $ akamai gtm update-property example.akadns.net testproperty --liveness_test test --disable
 ```
 
+would result in the following output:
+
+```
+pLivenessTests:  [test]
+testproperty contains 3 targets
+Updating Traffic Targets ... [OK]
+livesness tests:  test
+Processing liveness test:  test
+Liveness test match!
+pEnabled:  true
+test.Disabled:  true
+
+Response Status
+ 
+ChangeId: f9d5f68c-dc67-4a60-8686-ec3fc642c8e9
+```
+
 ### Query Status 
 
-Query a datacenter's status:
+To query a domain's status:
+
+```
+$ akamai gtm query-status example.akadns.net 
+```
+
+would result in the following output:
+
+```
+Querying status ... [OK]
+Collecting Domain status
+Domain: example.akadns.net
+Current Status [OK]
+
+┌─────────────────────────┬──────────────────────────────────────────────────────────────────┐
+│ ChangeId                │ 400b8b94-e112-4b72-baec-63c9b5247c47                             │
+│ Message                 │ Current configuration has been propagated to all GTM nameservers │
+│ Passing Validation      │ true                                                             │
+│ Propagation Status      │ COMPLETE                                                         │
+│ Propagation Status Date │ 2026-06-18T08:54:00.000+00:00                                    │
+└─────────────────────────┴──────────────────────────────────────────────────────────────────┘
+
+```
+
+To query a datacenter's status:
 
 ```
 $ akamai gtm query-status example.akadns.net --datacenter 3132
+```
+
+would result in the following output:
+
+```
+Querying status ... [OK]
+Collecting DC status ... [OK]
+Domain: example.akadns.net
+Period Start: 2026-06-18T08:50:00Z
+Period End: 2026-06-18T09:05:00Z
+
+┌────────────┬───────────────────┬───────────────────────────┬───────────────┬─────────┬──────────┬────────┐
+│ DATACENTER │     NICKNAME      │         TIMESTAMP         │   PROPERTY    │ ENABLED │ REQUESTS │ STATUS │
+├────────────┼───────────────────┼───────────────────────────┼───────────────┼─────────┼──────────┼────────┤
+│ 3132       │ property_test_dc2 │ 2026-07-08T19:36:15+05:30 │ testproperty  │ true    │ 0        │ 0      │
+└────────────┴───────────────────┴───────────────────────────┴───────────────┴─────────┴──────────┴────────┘
 ```
 
 To query a property's status:
 
 ```
 $ akamai gtm query-status example.akadns.net --property testproperty
+```
+
+would result in the following output:
+
+```
+Querying status ... [OK]
+Collecting Property status
+Domain: example.akadns.net
+Property: testproperty
+Period Start: 2026-06-22T08:30:00Z
+Period End: 2026-06-22T08:45:00Z
+Status Summary Last Update: Not Available, Cutoff: 0
+
+┌────────────┬──────────────┬─────────────┬─────────┬────────┬────────────────┬────────────────┬─────────────┬──────────────────┐
+│ DATACENTER │ NICKNAME     │ TARGET NAME │ ENABLED │ WEIGHT │ TOTAL REQUESTS │ PROPERTY USAGE │ IP          │ STATE            │
+├────────────┼──────────────┼─────────────┼─────────┼────────┼────────────────┼────────────────┼─────────────┼──────────────────┤
+│ 3131       │ property_dc1 │             │ true    │ 40.0   │ 0              │ 0.00%          │ Score: 0.00 │ HandedOut: false │
+│            │              │             │         │        │                │                │ Alive: false│                  │
+│ 3132       │ property_dc2 │             │ true    │ 25.0   │ 0              │ 0.00%          │ Score: 0.00 │ HandedOut: false │
+│            │              │             │         │        │                │                │ Alive: false│                  │
+│ 3133       │ property_dc3 │             │ true    │ 45.0   │ 0              │ 0.00%          │ Score: 0.00 │ HandedOut: false │
+│            │              │             │         │        │                │                │ Alive: false│                  │
+└────────────┴──────────────┴─────────────┴─────────┴────────┴────────────────┴────────────────┴─────────────┴──────────────────┘
+
+Datacenter Status
+
+┌─────────────────────────────────────────┬─────────────────────┬─────────────────┐
+│ TIMESTAMP                               │ DATACENTER NICKNAME │ REQUESTS STATUS │
+├─────────────────────────────────────────┼─────────────────────┼─────────────────┤
+│ No datacenter interval status available │                     │                 │
+└─────────────────────────────────────────┴─────────────────────┴─────────────────┘
+
 ```
 
 ## License

@@ -6,7 +6,7 @@ import (
 
 	"cli-gtm/edgegrid"
 
-	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v12/pkg/log"
+	"github.com/akamai/AkamaiOPEN-edgegrid-golang/v13/pkg/log"
 )
 
 // InitLogging enables default logging if needed.
